@@ -62,7 +62,7 @@ public record QtVersion(int Major, int Minor, int Revision) {
 		string dirForVersionAndVariant = variant.Length != 0 ? $"{dirForVersion}_{variant}" : dirForVersion;
 		return
 			ToVersion() >= new Version(6, 8, 0) ? $"{dirForVersion}/{dirForVersionAndVariant}" :
-				dirForVersionAndVariant;
+			dirForVersionAndVariant;
 	}
 
 	private static QtVersion Parse(string value) =>
