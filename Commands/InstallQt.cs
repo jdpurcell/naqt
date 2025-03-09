@@ -226,16 +226,39 @@ public class InstallQtCommand : ICommand {
 	}
 
 	private void PatchInstall(string installDirectory, string? desktopInstallDirectory = null) {
+		void PatchConfigFile(string confPath, (string Prefix, string UpdatedRemainder)[] updates) {
+			string confContent = File.ReadAllText(confPath);
+			bool changedConf = false;
+			foreach (string line in confContent.SplitLines()) {
+				foreach (var update in updates.Where(u => line.StartsWith(u.Prefix, StringComparison.Ordinal))) {
+					confContent = confContent.Replace(line, update.Prefix + update.UpdatedRemainder);
+					changedConf = true;
+				}
+			}
+			if (changedConf) {
+				File.WriteAllText(confPath, confContent);
+				Logger.Write($"Patched {confPath}");
+			}
+		}
+
+		// Patch qconfig.pri
+		PatchConfigFile(
+			Path.Combine(installDirectory, "mkspecs", "qconfig.pri"),
+			[
+				("QT_EDITION =", " OpenSource"),
+				("QT_LICHECK =", ""),
+			]
+		);
+
 		// Create qt.conf
 		string qtConfPath = Path.Combine(installDirectory, "bin", "qt.conf");
-		Logger.Write($"Creating {qtConfPath}");
 		File.WriteAllLines(qtConfPath, ["[Paths]", "Prefix=.."]);
+		Logger.Write($"Created {qtConfPath}");
 
 		if (desktopInstallDirectory is null) {
 			if ((DesktopHost ?? Host).IsWindows) {
 				// Create qtenv2.bat
 				string qtEnv2Path = Path.Combine(installDirectory, "bin", "qtenv2.bat");
-				Logger.Write($"Creating {qtEnv2Path}");
 				File.WriteAllLines(qtEnv2Path, [
 					"@echo off",
 					"echo Setting up environment for Qt usage...",
@@ -243,6 +266,7 @@ public class InstallQtCommand : ICommand {
 					$"cd /D {installDirectory}",
 					"echo Remember to call vcvarsall.bat to complete environment setup!"
 				]);
+				Logger.Write($"Created {qtEnv2Path}");
 			}
 
 			// Return early; remaining code is for a cross-compilation install
@@ -250,19 +274,14 @@ public class InstallQtCommand : ICommand {
 		}
 
 		// Patch target_qt.conf
-		string targetQtConfPath = Path.Combine(installDirectory, "bin", "target_qt.conf");
-		Logger.Write($"Patching {targetQtConfPath}");
-		string confContent = File.ReadAllText(targetQtConfPath);
-		string[] confLines = confContent.SplitLines();
-		void ReplaceConfValue(string key, string value) {
-			foreach (string line in confLines.Where(l => l.StartsWith($"{key}=", StringComparison.Ordinal))) {
-				confContent = confContent.Replace(line, $"{key}={value}");
-			}
-		}
-		ReplaceConfValue("HostData", $"../{Path.GetFileName(installDirectory)}");
-		ReplaceConfValue("HostPrefix", $"../../{Path.GetFileName(desktopInstallDirectory)}");
-		ReplaceConfValue("HostLibraryExecutables", DesktopHost!.IsWindows ? "./bin" : "./libexec");
-		File.WriteAllText(targetQtConfPath, confContent);
+		PatchConfigFile(
+			Path.Combine(installDirectory, "bin", "target_qt.conf"),
+			[
+				("HostData=", $"../{Path.GetFileName(installDirectory)}"),
+				("HostPrefix=", $"../../{Path.GetFileName(desktopInstallDirectory)}"),
+				("HostLibraryExecutables=", DesktopHost!.IsWindows ? "./bin" : "./libexec")
+			]
+		);
 
 		// Patch qmake/qtpaths scripts
 		IEnumerable<string> scriptPaths =
@@ -277,14 +296,19 @@ public class InstallQtCommand : ICommand {
 			if (!File.Exists(scriptPath)) {
 				continue;
 			}
-			Logger.Write($"Patching {scriptPath}");
 			string scriptContent = File.ReadAllText(scriptPath);
+			bool changedScript = false;
 			string correctValue = Path.Combine(desktopInstallDirectory, ".")[..^1]; // Add trailing slash
 			foreach (string placeholder in placeholders) {
+				string originalInstance = scriptContent;
 				scriptContent = scriptContent.Replace(placeholder, correctValue)
 					.Replace(placeholder.Replace('/', '\\'), correctValue);
+				changedScript |= !ReferenceEquals(scriptContent, originalInstance);
 			}
-			File.WriteAllText(scriptPath, scriptContent);
+			if (changedScript) {
+				File.WriteAllText(scriptPath, scriptContent);
+				Logger.Write($"Patched {scriptPath}");
+			}
 		}
 	}
 
