@@ -1,0 +1,3 @@
+[submodule "sharpcompress-binaries"]
+	path = sharpcompress-binaries
+	url = https://github.com/jdpurcell/sharpcompress-binaries

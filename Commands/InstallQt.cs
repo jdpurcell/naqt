@@ -5,7 +5,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using SharpCompress.Archives;
 using SharpCompress.Archives.SevenZip;
 
 namespace naqt;
@@ -122,6 +121,7 @@ public class InstallQtCommand : ICommand {
 		Download baseDownload = FindQtbaseDownload(basePackage);
 		Download? desktopBaseDownload = desktopBasePackage?.With(FindQtbaseDownload);
 
+		object createDirectorySync = new();
 		HashSet<string> directoriesPendingDeletion = [downloadDirectory];
 		void CleanupDirectories() {
 			foreach (string directory in directoriesPendingDeletion) {
@@ -137,7 +137,6 @@ public class InstallQtCommand : ICommand {
 		}
 		using DisposeAction disposeAction = new(CleanupDirectories);
 
-		object dirSync = new();
 		await Parallel.ForEachAsync(downloads,
 			new ParallelOptions {
 				MaxDegreeOfParallelism = 4,
@@ -147,7 +146,7 @@ public class InstallQtCommand : ICommand {
 				string remoteUrl = download.GetUrl(updateDirectoryUrl);
 				string localPath = download.GetLocalPath(downloadDirectory);
 				byte[] hash = Options.NoHash ? Network.DummySha256Hash : await Network.GetPublishedSha256ForFileAsync(remoteUrl, ct);
-				lock (dirSync) {
+				lock (createDirectorySync) {
 					Directory.CreateDirectory(Path.GetDirectoryName(localPath)!);
 				}
 				await using (FileStream destStream = AsyncFile.Create(localPath)) {
@@ -206,9 +205,7 @@ public class InstallQtCommand : ICommand {
 				string targetDirectory = targetDirectoryComponents.Length != 0 ?
 					Path.Join([outputDirectory, ..targetDirectoryComponents]) :
 					outputDirectory;
-				using (SevenZipArchive archive = SevenZipArchive.Open(archivePath)) {
-					archive.ExtractToDirectory(targetDirectory, cancellationToken: cancellationToken);
-				}
+				Helper.ExtractSevenZip(archivePath, targetDirectory, createDirectorySync, cancellationToken);
 				File.Delete(archivePath);
 				Logger.Write($"Extracted {download.Archive.FileName}");
 			});
@@ -288,10 +285,6 @@ public class InstallQtCommand : ICommand {
 					.Replace(placeholder.Replace('/', '\\'), correctValue);
 			}
 			File.WriteAllText(scriptPath, scriptContent);
-			if (!OperatingSystem.IsWindows()) {
-				new FileInfo(scriptPath).UnixFileMode |=
-					UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
-			}
 		}
 	}
 

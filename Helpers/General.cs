@@ -2,11 +2,89 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using SharpCompress.Archives.SevenZip;
 
 namespace naqt;
+
+public static class Constants {
+	public const int FileBufferSize = 65536;
+
+	public static readonly string TrustedMirror = "https://download.qt.io";
+}
+
+public static class Helper {
+	public static void ExtractSevenZip(
+		string archivePath,
+		string destDirectory,
+		object? createDirectorySync = null,
+		CancellationToken cancellationToken = default)
+	{
+		using SevenZipArchive archive = SevenZipArchive.Open(archivePath);
+		HashSet<string> seenDirectories = [];
+
+		createDirectorySync ??= new();
+		void CreateDirectory(string directory) {
+			if (seenDirectories.Add(directory)) {
+				lock (createDirectorySync) {
+					Directory.CreateDirectory(directory);
+				}
+			}
+		}
+
+		destDirectory = Path.GetFullPath(destDirectory);
+		CreateDirectory(destDirectory);
+
+		SharpCompress.Readers.IReader entries = archive.ExtractAllEntries();
+		while (entries.MoveToNextEntry()) {
+			cancellationToken.ThrowIfCancellationRequested();
+
+			SevenZipArchiveEntry entry = (SevenZipArchiveEntry)entries.Entry;
+			if (String.IsNullOrEmpty(entry.Key)) {
+				throw new Exception("Entry has an empty key.");
+			}
+
+			string entryDestPath = Path.GetFullPath(Path.Combine(destDirectory, entry.Key));
+			if (entry.IsDirectory) {
+				if (!entryDestPath.StartsWith(destDirectory, StringComparison.Ordinal) ||
+					(entryDestPath.Length > destDirectory.Length &&
+					 entryDestPath[destDirectory.Length] != Path.DirectorySeparatorChar))
+				{
+					throw new Exception("Extracted directory would exist outside of the destination.");
+				}
+				CreateDirectory(entryDestPath);
+			}
+			else {
+				if (!seenDirectories.Contains(Path.GetDirectoryName(entryDestPath) ?? "")) {
+					throw new Exception("File entry is missing a corresponding directory entry.");
+				}
+				int attrib = entry.ExtendedAttrib ?? 0;
+				bool hasUnixAttributes = (attrib & 0x8000) != 0;
+				bool isSymbolicLink = hasUnixAttributes && (attrib & 0x20000000) != 0;
+				if (!OperatingSystem.IsWindows() && isSymbolicLink) {
+					using MemoryStream stream = new();
+					entries.WriteEntryTo(stream);
+					string targetPath = stream.ReadAllText();
+					File.CreateSymbolicLink(entryDestPath, targetPath);
+				}
+				else {
+					using (FileStream stream = File.Create(entryDestPath, Constants.FileBufferSize)) {
+						entries.WriteEntryTo(stream);
+					}
+					if (!OperatingSystem.IsWindows() && hasUnixAttributes) {
+						UnixFileMode fileMode = (UnixFileMode)((attrib >> 16) & 0x1FF);
+						if (fileMode != UnixFileMode.None) {
+							new FileInfo(entryDestPath).UnixFileMode = fileMode;
+						}
+					}
+				}
+			}
+		}
+	}
+}
 
 public static class GeneralExtensionMethods {
 	public static T? TryParse<T>(this string value, IFormatProvider? provider = null)
@@ -35,6 +113,10 @@ public static class GeneralExtensionMethods {
 	public static XElement RequiredElement(this XContainer container, string name) {
 		return container.Element(name) ??
 			throw new Exception($"Element \"{name}\" not found.");
+	}
+
+	public static string ReadAllText(this MemoryStream stream) {
+		return Encoding.UTF8.GetString(stream.GetBuffer(), 0, (int)stream.Length);
 	}
 }
 
@@ -104,13 +186,11 @@ public class DisposeAction : IDisposable {
 }
 
 public static class AsyncFile {
-	private const int DefaultBufferSize = 65536;
-
 	public static FileStream Create(string path) =>
-		new(path, FileMode.Create, FileAccess.ReadWrite, FileShare.None, DefaultBufferSize, FileOptions.Asynchronous);
+		new(path, FileMode.Create, FileAccess.ReadWrite, FileShare.None, Constants.FileBufferSize, FileOptions.Asynchronous);
 
 	public static FileStream OpenRead(string path) =>
-		new(path, FileMode.Open, FileAccess.Read, FileShare.Read, DefaultBufferSize, FileOptions.Asynchronous);
+		new(path, FileMode.Open, FileAccess.Read, FileShare.Read, Constants.FileBufferSize, FileOptions.Asynchronous);
 }
 
 public interface ICommandOptions;

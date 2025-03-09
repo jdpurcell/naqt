@@ -3,7 +3,6 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -43,8 +42,8 @@ public static class Network {
 	}
 
 	public static async Task<string> GetAsUtf8StringWithSha256ValidationAsync(string url, byte[] expectedHash, CancellationToken cancellationToken = default) {
-		using MemoryStream memoryStream = new();
-		await GetToStreamWithSha256ValidationAsync(url, memoryStream, expectedHash, cancellationToken);
-		return Encoding.UTF8.GetString(memoryStream.GetBuffer(), 0, (int)memoryStream.Length);
+		using MemoryStream stream = new();
+		await GetToStreamWithSha256ValidationAsync(url, stream, expectedHash, cancellationToken);
+		return stream.ReadAllText();
 	}
 }
