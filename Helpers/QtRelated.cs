@@ -129,6 +129,26 @@ public static class QtHelper {
 		};
 	}
 
+	public static QtArch GetDefaultArch(QtHost host, QtVersion version) {
+		Version ver = version.ToVersion();
+		string archValue = host.Value switch {
+			"windows" =>
+				ver >= new Version(6, 8, 0) ? "win64_msvc2022_64" :
+				"win64_msvc2019_64",
+			"windows_arm64" =>
+				"win64_msvc2022_arm64",
+			"linux" =>
+				ver >= new Version(6, 7, 0) ? "linux_gcc_64" :
+				"gcc_64",
+			"linux_arm64" =>
+				"linux_gcc_arm64",
+			"mac" =>
+				"clang_64",
+			_ => throw new ArgumentException("Host value is not recognized.")
+		};
+		return new QtArch(archValue);
+	}
+
 	public static QtArch? GetHostArchForCrossCompilation(QtHost host, QtTarget target, QtVersion version, QtArch arch) {
 		if (host.Value == "windows" && target.Value == "desktop") {
 			string armSuffix = version.ToVersion() >= new Version(6, 8, 0) ? "_arm64_cross_compiled" : "_arm64";

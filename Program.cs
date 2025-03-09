@@ -59,7 +59,7 @@ internal static class Program {
 		WriteLine();
 		WriteLine("Commands");
 		WriteLine("   install-qt");
-		WriteLine("      <host> <target> <version> <arch>");
+		WriteLine("      <host> <target> <version> [<arch>]");
 		WriteLine("      [--outputdir <directory>]");
 		WriteLine("      [--modules <module> [<module>...]]");
 		WriteLine("      [--archives <archive> [<archive>...]]");

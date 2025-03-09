@@ -14,7 +14,7 @@ dotnet run -- install-qt windows desktop 6.8.2 win64_msvc2022_64
 ```
 Commands
    install-qt
-      <host> <target> <version> <arch>
+      <host> <target> <version> [<arch>]
       [--outputdir <directory>]
       [--modules <module> [<module>...]]
       [--archives <archive> [<archive>...]]

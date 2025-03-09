@@ -14,7 +14,7 @@ public class InstallQtOptions : ICommandOptions {
 	public QtHost Host { get; set; }
 	public QtTarget Target { get; set; }
 	public QtVersion Version { get; set; }
-	public QtArch Arch { get; set; }
+	public QtArch? Arch { get; set; }
 	public string OutputDir { get; set; } = "";
 	public List<string> Modules { get; set; } = [];
 	public List<string> Archives { get; set; } = [];
@@ -25,7 +25,7 @@ public class InstallQtOptions : ICommandOptions {
 		Host = new QtHost(cli.GetValueArg());
 		Target = new QtTarget(cli.GetValueArg());
 		Version = new QtVersion(cli.GetValueArg());
-		Arch = new QtArch(cli.GetValueArg());
+		Arch = cli.HasValueArg() ? new QtArch(cli.GetValueArg()) : null;
 		List<string> GetListValues() {
 			List<string> values = [];
 			while (cli.HasValueArg()) {
@@ -69,7 +69,7 @@ public class InstallQtCommand : ICommand {
 	private QtHost Host => Options.Host;
 	private QtTarget Target => Options.Target;
 	private QtVersion Version => Options.Version;
-	private QtArch Arch => Options.Arch;
+	private QtArch Arch => Options.Arch ?? QtHelper.GetDefaultArch(Host, Version);
 	private QtHost? DesktopHost { get; set; }
 	private QtTarget? DesktopTarget { get; set; }
 	private QtArch? DesktopArch { get; set; }
