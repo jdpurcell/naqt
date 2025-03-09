@@ -90,7 +90,7 @@ public class QtUpdate {
 
 public static class QtHelper {
 	public static string GetUpdateDirectoryUrl(QtHost host, QtTarget target, QtVersion version) {
-		return $"https://download.qt.io/online/qtsdkrepository/{host.ToUrlComponent()}/{target.ToUrlComponent()}/{version.ToUrlComponent()}/";
+		return $"{Constants.TrustedMirror}/online/qtsdkrepository/{host.ToUrlComponent()}/{target.ToUrlComponent()}/{version.ToUrlComponent()}/";
 	}
 
 	public static async Task<QtUpdate> FetchUpdate(string updateDirectoryUrl, bool noHash = false, CancellationToken cancellationToken = default) {
