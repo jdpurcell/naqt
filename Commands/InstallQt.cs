@@ -72,6 +72,10 @@ public class InstallQtCommand : ICommand {
 	private QtHost? DesktopHost { get; set; }
 	private QtArch? DesktopArch { get; set; }
 
+	// This should probably be a command line option, but only doing it for wasm for now to
+	// mimic a behavior in aqtinstall (which I'm not even sure is intentional).
+	private bool DesktopInstallsSameModules => Target.Value == "wasm";
+
 	public InstallQtCommand(InstallQtOptions options, Context context) {
 		Options = options;
 		Context = context;
@@ -88,6 +92,7 @@ public class InstallQtCommand : ICommand {
 
 		string? desktopUpdateDirectoryUrl = null;
 		QtUpdate.Package? desktopBasePackage = null;
+		Dictionary<string, QtModule>? desktopModulesByName = null;
 		if (Options.AutoDesktop) {
 			AutoDesktopConfiguration? desktopConfig = QtHelper.GetAutoDesktopConfiguration(Host, Target, Version, Arch);
 			if (desktopConfig is not null) {
@@ -104,6 +109,7 @@ public class InstallQtCommand : ICommand {
 					desktopUpdate = await QtHelper.FetchUpdate(desktopUpdateDirectoryUrl, Options.NoHash, cancellationToken);
 				}
 				desktopBasePackage = desktopUpdate.GetBasePackage(DesktopArch);
+				desktopModulesByName = desktopUpdate.GetModules(DesktopArch).ToDictionary(m => m.Name);
 			}
 		}
 
@@ -126,6 +132,13 @@ public class InstallQtCommand : ICommand {
 		}
 		if (DesktopArch is not null) {
 			AddDownload(desktopBasePackage!, true);
+			if (DesktopInstallsSameModules) {
+				foreach (string moduleName in Options.Modules) {
+					QtModule module = desktopModulesByName!.GetValueOrDefault(moduleName) ??
+						throw new Exception($"Module {moduleName} not found.");
+					AddDownload(module.Package, true);
+				}
+			}
 		}
 		Download FindQtbaseDownload(QtUpdate.Package package) =>
 			downloads.Single(d => d.Package == package && d.Archive.MatchesShortName("qtbase"));
