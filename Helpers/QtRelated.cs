@@ -25,6 +25,12 @@ public record QtHost(string Value) {
 
 	public bool IsWindows =>
 		Value.StartsWith("windows", StringComparison.Ordinal);
+
+	public bool IsLinux =>
+		Value.StartsWith("linux", StringComparison.Ordinal);
+
+	public bool IsMacOS =>
+		Value.StartsWith("mac", StringComparison.Ordinal);
 }
 
 public record QtTarget(string Value) {

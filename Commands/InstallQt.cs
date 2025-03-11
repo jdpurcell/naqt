@@ -280,6 +280,14 @@ public class InstallQtCommand : ICommand {
 				Logger.Write($"Created {qtEnv2Path}");
 			}
 
+			// Patch pkgconfig files
+			string pkgConfigDirectory = Path.Combine(installDirectory, "lib", "pkgconfig");
+			IEnumerable<string> pkgConfigPaths = !Directory.Exists(pkgConfigDirectory) ? [] :
+				Directory.EnumerateFiles(pkgConfigDirectory, "*.pc");
+			foreach (string pkgConfigPath in pkgConfigPaths) {
+				PatchConfigFile(pkgConfigPath, [("prefix=", installDirectory)]);
+			}
+
 			// Return early; remaining code is for a cross-compilation install
 			return;
 		}
