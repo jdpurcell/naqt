@@ -24,13 +24,13 @@ public record QtHost(string Value) {
 	}
 
 	public bool IsWindows =>
-		Value.StartsWith("windows", StringComparison.Ordinal);
+		Value.StartsWithOrdinal("windows");
 
 	public bool IsLinux =>
-		Value.StartsWith("linux", StringComparison.Ordinal);
+		Value.StartsWithOrdinal("linux");
 
 	public bool IsMacOS =>
-		Value.StartsWith("mac", StringComparison.Ordinal);
+		Value.StartsWithOrdinal("mac");
 }
 
 public record QtTarget(string Value) {
@@ -180,8 +180,7 @@ public static class QtHelper {
 		}
 		if (target.Value == "android") {
 			string stripPrefix = "android_";
-			bool hasStripPrefix = arch.Value.StartsWith(stripPrefix, StringComparison.Ordinal);
-			return hasStripPrefix ? arch.Value[stripPrefix.Length..] : "";
+			return arch.Value.StartsWithOrdinal(stripPrefix) ? arch.Value[stripPrefix.Length..] : "";
 		}
 		return "";
 	}
@@ -218,7 +217,7 @@ public static class QtHelper {
 			GetDefaultArch(desktopHost, new QtTarget("desktop"), version);
 		if (target.Value == "desktop" && desktopHost.Value == "windows") {
 			string armSuffix = version.ToVersion() >= new Version(6, 8, 0) ? "_arm64_cross_compiled" : "_arm64";
-			if (arch.Value.EndsWith(armSuffix, StringComparison.Ordinal)) {
+			if (arch.Value.EndsWithOrdinal(armSuffix)) {
 				desktopArch = new QtArch($"{arch.Value[..^armSuffix.Length]}_64");
 			}
 		}
@@ -239,7 +238,7 @@ public static class QtExtensionMethods {
 	public static QtUpdate.Package[] GetBasePackages(this QtUpdate update) {
 		return [..
 			from package in update.Packages
-			where package.Archives.Any(a => a.Identifier.StartsWith("qtbase-", StringComparison.Ordinal))
+			where package.Archives.Any(a => a.Identifier.StartsWithOrdinal("qtbase-"))
 			let nameSegments = package.Name.Split('.')
 			where nameSegments.Length == 4
 			select package
@@ -248,7 +247,7 @@ public static class QtExtensionMethods {
 
 	public static QtUpdate.Package GetBasePackage(this QtUpdate update, QtArch arch) {
 		List<QtUpdate.Package> packages = GetBasePackages(update)
-			.Where(p => p.Name.EndsWith($".{arch.Value}")).Take(2).ToList();
+			.Where(p => p.Name.EndsWithOrdinal($".{arch.Value}")).Take(2).ToList();
 		return packages.Count switch {
 			1 => packages[0],
 			0 => throw new Exception($"No base package found for \"{arch.Value}\"."),
@@ -272,7 +271,7 @@ public static class QtExtensionMethods {
 			where nameSegments.Length >= 5 &&
 				  nameSegments[^1] == arch.Value
 			let hasGroupName = nameSegments.Length >= 6 &&
-				groupNames.Any(n => n.Equals(nameSegments[3], StringComparison.OrdinalIgnoreCase))
+				groupNames.Contains(nameSegments[3])
 			let startSegment = hasGroupName ? 4 : 3
 			select new QtModule(String.Join('.', nameSegments[startSegment..^1]), package)
 		];
@@ -283,7 +282,7 @@ public static class QtExtensionMethods {
 	}
 
 	public static bool MatchesShortName(this QtUpdate.Archive archive, string shortName) {
-		return archive.Identifier.StartsWith($"{shortName}-", StringComparison.Ordinal);
+		return archive.Identifier.StartsWithOrdinal($"{shortName}-");
 	}
 
 	public static string[] GetTargetDirectoryComponents(this QtUpdate.Archive archive) {

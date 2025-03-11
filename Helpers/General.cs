@@ -14,6 +14,10 @@ public static class Constants {
 	public const int FileBufferSize = 65536;
 
 	public static readonly string TrustedMirror = "https://download.qt.io";
+
+	public static int DownloadConcurrency = 4;
+
+	public static int ExtractConcurrency = 4;
 }
 
 public static class Helper {
@@ -49,7 +53,7 @@ public static class Helper {
 
 			string entryDestPath = Path.GetFullPath(Path.Combine(destDirectory, entry.Key));
 			if (entry.IsDirectory) {
-				if (!entryDestPath.StartsWith(destDirectory, StringComparison.Ordinal) ||
+				if (!entryDestPath.StartsWithOrdinal(destDirectory) ||
 					(entryDestPath.Length > destDirectory.Length &&
 					 entryDestPath[destDirectory.Length] != Path.DirectorySeparatorChar))
 				{
@@ -91,6 +95,14 @@ public static class GeneralExtensionMethods {
 		where T : struct, IParsable<T>
 	{
 		return T.TryParse(value, provider, out T result) ? result : null;
+	}
+
+	public static bool StartsWithOrdinal(this string str, string value) {
+		return str.StartsWith(value, StringComparison.Ordinal);
+	}
+
+	public static bool EndsWithOrdinal(this string str, string value) {
+		return str.EndsWith(value, StringComparison.Ordinal);
 	}
 
 	public static IEnumerable<string> ExceptEmpty(this IEnumerable<string> collection) {

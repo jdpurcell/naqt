@@ -163,7 +163,7 @@ public class InstallQtCommand : ICommand {
 
 		await Parallel.ForEachAsync(downloads,
 			new ParallelOptions {
-				MaxDegreeOfParallelism = 4,
+				MaxDegreeOfParallelism = Constants.DownloadConcurrency,
 				CancellationToken = cancellationToken
 			},
 			async (download, ct) => {
@@ -220,7 +220,7 @@ public class InstallQtCommand : ICommand {
 
 		Parallel.ForEach(downloads,
 			new ParallelOptions {
-				MaxDegreeOfParallelism = 4,
+				MaxDegreeOfParallelism = Constants.ExtractConcurrency,
 				CancellationToken = cancellationToken
 			},
 			download => {
@@ -254,7 +254,7 @@ public class InstallQtCommand : ICommand {
 			string confContent = File.ReadAllText(confPath);
 			bool changedConf = false;
 			foreach (string line in confContent.SplitLines()) {
-				foreach (var update in updates.Where(u => line.StartsWith(u.Prefix, StringComparison.Ordinal))) {
+				foreach (var update in updates.Where(u => line.StartsWithOrdinal(u.Prefix))) {
 					confContent = confContent.Replace(line, update.Prefix + update.UpdatedRemainder);
 					changedConf = true;
 				}
