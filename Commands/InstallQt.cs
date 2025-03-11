@@ -305,15 +305,17 @@ public class InstallQtCommand : ICommand {
 			return;
 		}
 
-		// Patch target_qt.conf
-		PatchConfigFile(
-			Path.Combine(installDirectory, "bin", "target_qt.conf"),
-			[
-				("HostData=", $"../{Path.GetFileName(installDirectory)}"),
-				("HostPrefix=", $"../../{Path.GetFileName(desktopInstallDirectory)}"),
-				("HostLibraryExecutables=", DesktopHost!.IsWindows ? "./bin" : "./libexec")
-			]
-		);
+		if (Version.ToVersion() >= new Version(6, 0, 0)) {
+			// Patch target_qt.conf
+			PatchConfigFile(
+				Path.Combine(installDirectory, "bin", "target_qt.conf"),
+				[
+					("HostData=", $"../{Path.GetFileName(installDirectory)}"),
+					("HostPrefix=", $"../../{Path.GetFileName(desktopInstallDirectory)}"),
+					("HostLibraryExecutables=", DesktopHost!.IsWindows ? "./bin" : "./libexec")
+				]
+			);
+		}
 
 		// Patch qmake/qtpaths scripts
 		IEnumerable<string> scriptPaths =
