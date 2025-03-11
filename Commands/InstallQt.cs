@@ -68,9 +68,8 @@ public class InstallQtCommand : ICommand {
 	private QtHost Host => Options.Host;
 	private QtTarget Target => Options.Target;
 	private QtVersion Version => Options.Version;
-	private QtArch Arch => Options.Arch ?? QtHelper.GetDefaultArch(Host, Version);
+	private QtArch Arch => Options.Arch ?? QtHelper.GetDefaultArch(Host, Target, Version);
 	private QtHost? DesktopHost { get; set; }
-	private QtTarget? DesktopTarget { get; set; }
 	private QtArch? DesktopArch { get; set; }
 
 	public InstallQtCommand(InstallQtOptions options, Context context) {
@@ -80,41 +79,53 @@ public class InstallQtCommand : ICommand {
 
 	public async Task RunAsync(CancellationToken cancellationToken = default) {
 		long runStartTimestamp = Stopwatch.GetTimestamp();
-		string updateDirectoryUrl = QtHelper.GetUpdateDirectoryUrl(Host, Target, Version);
-		string downloadDirectory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+
+		Logger.Write($"Selected configuration: {Host} {Target} {Version} {Arch}");
+		string updateDirectoryUrl = QtHelper.GetUpdateDirectoryUrl(Host, Target, Version, Arch);
 		QtUpdate update = await QtHelper.FetchUpdate(updateDirectoryUrl, Options.NoHash, cancellationToken);
 		QtUpdate.Package basePackage = update.GetBasePackage(Arch);
 		Dictionary<string, QtModule> modulesByName = update.GetModules(Arch).ToDictionary(m => m.Name);
 
+		string? desktopUpdateDirectoryUrl = null;
+		QtUpdate.Package? desktopBasePackage = null;
 		if (Options.AutoDesktop) {
-			// Desktop install must be for the same host/target currently, but in the future we
-			// could allow them to differ. This just supports Windows on ARM as it is.
-			DesktopArch = QtHelper.GetHostArchForCrossCompilation(Host, Target, Version, Arch);
-			if (DesktopArch is not null) {
-				DesktopHost = Host;
-				DesktopTarget = Target;
+			AutoDesktopConfiguration? desktopConfig = QtHelper.GetAutoDesktopConfiguration(Host, Target, Version, Arch);
+			if (desktopConfig is not null) {
+				DesktopHost = desktopConfig.Host;
+				DesktopArch = desktopConfig.Arch;
+				Logger.Write($"Desktop configuration: {DesktopHost} desktop {Version} {DesktopArch}");
+				QtUpdate desktopUpdate;
+				if (Host == DesktopHost && Target.Value == "desktop") {
+					desktopUpdateDirectoryUrl = updateDirectoryUrl;
+					desktopUpdate = update;
+				}
+				else {
+					desktopUpdateDirectoryUrl = QtHelper.GetUpdateDirectoryUrl(DesktopHost, new QtTarget("desktop"), Version, DesktopArch);
+					desktopUpdate = await QtHelper.FetchUpdate(desktopUpdateDirectoryUrl, Options.NoHash, cancellationToken);
+				}
+				desktopBasePackage = desktopUpdate.GetBasePackage(DesktopArch);
 			}
 		}
-		QtUpdate.Package? desktopBasePackage = DesktopArch?.With(update.GetBasePackage);
 
+		string downloadDirectory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
 		List<Download> downloads = [];
-		void AddDownload(QtUpdate.Package package) {
+		void AddDownload(QtUpdate.Package package, bool forAutoDesktop) {
 			downloads.AddRange(
 				from archive in package.Archives
 				let shouldSkip = Options.Archives.Count != 0 && ReferenceEquals(package, basePackage) &&
 					!archive.MatchesShortName("qtbase") && !Options.Archives.Any(archive.MatchesShortName)
 				where !shouldSkip
-				select new Download(archive, package)
+				select new Download(archive, package, forAutoDesktop ? desktopUpdateDirectoryUrl! : updateDirectoryUrl)
 			);
 		}
-		AddDownload(basePackage);
+		AddDownload(basePackage, false);
 		foreach (string moduleName in Options.Modules) {
 			QtModule module = modulesByName.GetValueOrDefault(moduleName) ??
 				throw new Exception($"Module {moduleName} not found.");
-			AddDownload(module.Package);
+			AddDownload(module.Package, false);
 		}
 		if (DesktopArch is not null) {
-			AddDownload(desktopBasePackage!);
+			AddDownload(desktopBasePackage!, true);
 		}
 		Download FindQtbaseDownload(QtUpdate.Package package) =>
 			downloads.Single(d => d.Package == package && d.Archive.MatchesShortName("qtbase"));
@@ -143,7 +154,7 @@ public class InstallQtCommand : ICommand {
 				CancellationToken = cancellationToken
 			},
 			async (download, ct) => {
-				string remoteUrl = download.GetUrl(updateDirectoryUrl);
+				string remoteUrl = download.GetUrl();
 				string localPath = download.GetLocalPath(downloadDirectory);
 				byte[] hash = Options.NoHash ? Network.DummySha256Hash : await Network.GetPublishedSha256ForFileAsync(remoteUrl, ct);
 				lock (createDirectorySync) {
@@ -170,7 +181,7 @@ public class InstallQtCommand : ICommand {
 				let allComponents = (string[])[..baseComponents, ..entry.Key!.Split('/')]
 				where allComponents.Length == 3 &&
 					  allComponents[0] == versionDirectoryName &&
-					  allComponents[^1].Equals("bin", StringComparison.Ordinal)
+					  allComponents[^1] == "bin"
 				select allComponents[1];
 			return candidateNames.Take(2).ToList().With(
 				names => names.Count switch {
@@ -312,9 +323,9 @@ public class InstallQtCommand : ICommand {
 		}
 	}
 
-	private record Download(QtUpdate.Archive Archive, QtUpdate.Package Package) {
-		public string GetUrl(string updateDirectoryUrl) =>
-			$"{updateDirectoryUrl}{Package.Name}/{Archive.FileName}";
+	private record Download(QtUpdate.Archive Archive, QtUpdate.Package Package, string UpdateDirectoryUrl) {
+		public string GetUrl() =>
+			$"{UpdateDirectoryUrl}{Package.Name}/{Archive.FileName}";
 
 		public string GetLocalPath(string directory) =>
 			Path.Combine(directory, Package.GetNameWithoutVersion(), Archive.Identifier);

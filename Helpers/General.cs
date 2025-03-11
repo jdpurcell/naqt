@@ -94,7 +94,7 @@ public static class GeneralExtensionMethods {
 	}
 
 	public static IEnumerable<string> ExceptEmpty(this IEnumerable<string> collection) {
-		return collection.Where(n => !String.IsNullOrEmpty(n));
+		return collection.Where(n => n.Length != 0);
 	}
 
 	public static string[] SplitLines(this string value) {

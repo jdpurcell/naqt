@@ -27,4 +27,4 @@ Commands
 ```
 
 ## Limitations
-The only supported target is currently `desktop`. Others such as `android`, `ios`, and `wasm` are not implemented.
+Does not support installation of modules that were moved to extensions in Qt 6.8 such as `qtwebengine` and `qtpdf`. Also doesn't support installation of Qt tools, source code, documentation, or examples. If you need any of these features, use the excellent [aqtinstall](https://github.com/miurahr/aqtinstall) instead.

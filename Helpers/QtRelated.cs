@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
@@ -17,6 +18,7 @@ public record QtHost(string Value) {
 			"linux" => "linux_x64",
 			"linux_arm64" => "linux_arm64",
 			"mac" => "mac_x64",
+			"all_os" => "all_os",
 			_ => throw new ArgumentException("Host value is not recognized.")
 		};
 	}
@@ -31,6 +33,9 @@ public record QtTarget(string Value) {
 	public string ToUrlComponent() {
 		return Value switch {
 			"desktop" => "desktop",
+			"wasm" => "wasm",
+			"android" => "android",
+			"ios" => "ios",
 			_ => throw new ArgumentException("Target value is not recognized.")
 		};
 	}
@@ -57,7 +62,7 @@ public record QtVersion(int Major, int Minor, int Revision) {
 	public Version ToVersion() =>
 		new Version(Major, Minor, Revision);
 
-	public string ToUrlComponent(string variant = "") {
+	public string ToUrlComponent(string variant) {
 		string dirForVersion = $"qt{Major}_{ToStringNoDots()}";
 		string dirForVersionAndVariant = variant.Length != 0 ? $"{dirForVersion}_{variant}" : dirForVersion;
 		return
@@ -89,8 +94,15 @@ public class QtUpdate {
 }
 
 public static class QtHelper {
-	public static string GetUpdateDirectoryUrl(QtHost host, QtTarget target, QtVersion version) {
-		return $"{Constants.TrustedMirror}/online/qtsdkrepository/{host.ToUrlComponent()}/{target.ToUrlComponent()}/{version.ToUrlComponent()}/";
+	public static string GetUpdateDirectoryUrl(QtHost host, QtTarget target, QtVersion version, QtArch? arch = null) {
+		string hostComponent = host.ToUrlComponent();
+		string targetComponent = target.ToUrlComponent();
+		string versionVariant = GetUrlVersionVariant(target, arch ?? new QtArch("unspecified"));
+		if (versionVariant == "unspecified") {
+			throw new ArgumentException("Listing architectures for this target is not supported.");
+		}
+		string versionComponent = version.ToUrlComponent(versionVariant);
+		return $"{Constants.TrustedMirror}/online/qtsdkrepository/{hostComponent}/{targetComponent}/{versionComponent}/";
 	}
 
 	public static async Task<QtUpdate> FetchUpdate(string updateDirectoryUrl, bool noHash = false, CancellationToken cancellationToken = default) {
@@ -129,36 +141,93 @@ public static class QtHelper {
 		};
 	}
 
-	public static QtArch GetDefaultArch(QtHost host, QtVersion version) {
+	public static QtArch GetDefaultArch(QtHost host, QtTarget target, QtVersion version) {
 		Version ver = version.ToVersion();
-		string archValue = host.Value switch {
-			"windows" =>
-				ver >= new Version(6, 8, 0) ? "win64_msvc2022_64" :
-				"win64_msvc2019_64",
-			"windows_arm64" =>
-				"win64_msvc2022_arm64",
-			"linux" =>
-				ver >= new Version(6, 7, 0) ? "linux_gcc_64" :
-				"gcc_64",
-			"linux_arm64" =>
-				"linux_gcc_arm64",
-			"mac" =>
-				"clang_64",
-			_ => throw new ArgumentException("Host value is not recognized.")
-		};
-		return new QtArch(archValue);
+		string? archValue = null;
+		if (host.Value == "mac" && target.Value == "ios") {
+			archValue = "ios";
+		}
+		else if (target.Value == "desktop") {
+			archValue = host.Value switch {
+				"windows" =>
+					ver >= new Version(6, 8, 0) ? "win64_msvc2022_64" :
+					"win64_msvc2019_64",
+				"windows_arm64" =>
+					"win64_msvc2022_arm64",
+				"linux" =>
+					ver >= new Version(6, 7, 0) ? "linux_gcc_64" :
+					"gcc_64",
+				"linux_arm64" =>
+					"linux_gcc_arm64",
+				"mac" =>
+					"clang_64",
+				_ => null
+			};
+		}
+		return archValue != null ? new QtArch(archValue) :
+			throw new ArgumentException("You must specify an architecture for this host.");
 	}
 
-	public static QtArch? GetHostArchForCrossCompilation(QtHost host, QtTarget target, QtVersion version, QtArch arch) {
-		if (host.Value == "windows" && target.Value == "desktop") {
+	public static string GetUrlVersionVariant(QtTarget target, QtArch arch) {
+		if (target.Value == "wasm") {
+			return arch.Value;
+		}
+		if (target.Value == "android") {
+			string stripPrefix = "android_";
+			bool hasStripPrefix = arch.Value.StartsWith(stripPrefix, StringComparison.Ordinal);
+			return hasStripPrefix ? arch.Value[stripPrefix.Length..] : "";
+		}
+		return "";
+	}
+
+	public static QtHost DetectMachineHost() {
+		string hostValue;
+		if (OperatingSystem.IsWindows()) {
+			hostValue = RuntimeInformation.OSArchitecture switch {
+				Architecture.X64 => "windows",
+				Architecture.Arm64 => "windows_arm64",
+				_ => throw new NotSupportedException()
+			};
+		}
+		else if (OperatingSystem.IsLinux()) {
+			hostValue = RuntimeInformation.OSArchitecture switch {
+				Architecture.X64 => "linux",
+				Architecture.Arm64 => "linux_arm64",
+				_ => throw new NotSupportedException()
+			};
+		}
+		else if (OperatingSystem.IsMacOS()) {
+			hostValue = "mac";
+		}
+		else {
+			throw new NotSupportedException();
+		}
+		return new QtHost(hostValue);
+	}
+
+	public static AutoDesktopConfiguration? GetAutoDesktopConfiguration(QtHost host, QtTarget target, QtVersion version, QtArch arch) {
+		QtHost desktopHost = host.Value == "all_os" ? DetectMachineHost() : host;
+		QtArch? desktopArch = null;
+		QtArch GetDefaultDesktopArch() =>
+			GetDefaultArch(desktopHost, new QtTarget("desktop"), version);
+		if (target.Value == "desktop" && desktopHost.Value == "windows") {
 			string armSuffix = version.ToVersion() >= new Version(6, 8, 0) ? "_arm64_cross_compiled" : "_arm64";
 			if (arch.Value.EndsWith(armSuffix, StringComparison.Ordinal)) {
-				return new QtArch($"{arch.Value[..^armSuffix.Length]}_64");
+				desktopArch = new QtArch($"{arch.Value[..^armSuffix.Length]}_64");
 			}
 		}
-		return null;
+		else if (target.Value == "ios" && desktopHost.Value == "mac") {
+			desktopArch = GetDefaultDesktopArch();
+		}
+		else if (target.Value == "wasm" || target.Value == "android") {
+			desktopArch = desktopHost.Value == "windows" ? new QtArch("win64_mingw") :
+				GetDefaultDesktopArch();
+		}
+		return desktopArch != null ? new AutoDesktopConfiguration(desktopHost, desktopArch) : null;
 	}
 }
+
+public record AutoDesktopConfiguration(QtHost Host, QtArch Arch);
 
 public static class QtExtensionMethods {
 	public static QtUpdate.Package[] GetBasePackages(this QtUpdate update) {
