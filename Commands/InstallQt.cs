@@ -80,6 +80,12 @@ public class InstallQtCommand : ICommand {
 	public async Task RunAsync(CancellationToken cancellationToken = default) {
 		long runStartTimestamp = Stopwatch.GetTimestamp();
 
+		QtHost? preferredDesktopHost = null;
+		if (QtHelper.UsesAllOsHost(Target, Version) && Host.Value != "all_os") {
+			preferredDesktopHost = Host;
+			Options.Host = new QtHost("all_os");
+		}
+
 		Logger.Write($"Selected configuration: {Host} {Target} {Version} {Arch}");
 		string updateDirectoryUrl = QtHelper.GetUpdateDirectoryUrl(Host, Target, Version, Arch);
 		QtUpdate update = await QtHelper.FetchUpdate(updateDirectoryUrl, Options.NoHash, cancellationToken);
@@ -90,9 +96,10 @@ public class InstallQtCommand : ICommand {
 		QtUpdate.Package? desktopBasePackage = null;
 		Dictionary<string, QtModule>? desktopModulesByName = null;
 		if (Options.AutoDesktop) {
-			AutoDesktopConfiguration? desktopConfig = QtHelper.GetAutoDesktopConfiguration(Host, Target, Version, Arch);
+			AutoDesktopConfiguration? desktopConfig =
+				QtHelper.GetAutoDesktopConfiguration(Host, Target, Version, Arch, preferredDesktopHost);
 			if (desktopConfig is not null) {
-				DesktopHost = desktopConfig.Host;
+				DesktopHost = preferredDesktopHost ?? desktopConfig.Host;
 				DesktopArch = desktopConfig.Arch;
 				Logger.Write($"Desktop configuration: {DesktopHost} desktop {Version} {DesktopArch}");
 				QtUpdate desktopUpdate;
@@ -301,7 +308,7 @@ public class InstallQtCommand : ICommand {
 			return;
 		}
 
-		if (Version.ToVersion() >= new Version(6, 0, 0)) {
+		if (Version.IsAtLeast(6, 0, 0)) {
 			// Patch target_qt.conf
 			PatchConfigFile(
 				Path.Combine(installDirectory, "bin", "target_qt.conf"),

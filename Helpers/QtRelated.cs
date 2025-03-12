@@ -68,11 +68,17 @@ public record QtVersion(int Major, int Minor, int Revision) {
 	public Version ToVersion() =>
 		new Version(Major, Minor, Revision);
 
+	public bool IsAtLeast(int major, int minor, int revision) =>
+		ToVersion() >= new Version(major, minor, revision);
+
+	public bool IsLessThan(int major, int minor, int revision) =>
+		ToVersion() < new Version(major, minor, revision);
+
 	public string ToUrlComponent(string variant) {
 		string dirForVersion = $"qt{Major}_{ToStringNoDots()}";
 		string dirForVersionAndVariant = variant.Length != 0 ? $"{dirForVersion}_{variant}" : dirForVersion;
 		return
-			ToVersion() >= new Version(6, 8, 0) ? $"{dirForVersion}/{dirForVersionAndVariant}" :
+			IsAtLeast(6, 8, 0) ? $"{dirForVersion}/{dirForVersionAndVariant}" :
 			dirForVersionAndVariant;
 	}
 
@@ -148,7 +154,6 @@ public static class QtHelper {
 	}
 
 	public static QtArch GetDefaultArch(QtHost host, QtTarget target, QtVersion version) {
-		Version ver = version.ToVersion();
 		string? archValue = null;
 		if (host.Value == "mac" && target.Value == "ios") {
 			archValue = "ios";
@@ -156,22 +161,24 @@ public static class QtHelper {
 		else if (target.Value == "desktop") {
 			archValue = host.Value switch {
 				"windows" =>
-					ver >= new Version(6, 8, 0) ? "win64_msvc2022_64" :
+					version.IsAtLeast(6, 8, 0) ? "win64_msvc2022_64" :
 					"win64_msvc2019_64",
 				"windows_arm64" =>
-					"win64_msvc2022_arm64",
+					version.IsAtLeast(6, 8, 0) ? "win64_msvc2022_arm64" :
+					null,
 				"linux" =>
-					ver >= new Version(6, 7, 0) ? "linux_gcc_64" :
+					version.IsAtLeast(6, 7, 0) ? "linux_gcc_64" :
 					"gcc_64",
 				"linux_arm64" =>
-					"linux_gcc_arm64",
+					version.IsAtLeast(6, 7, 0) ? "linux_gcc_arm64" :
+					null,
 				"mac" =>
 					"clang_64",
 				_ => null
 			};
 		}
 		return archValue != null ? new QtArch(archValue) :
-			throw new ArgumentException("You must specify an architecture for this host.");
+			throw new ArgumentException("Unable to determine a default architecture for this host.");
 	}
 
 	public static string GetUrlVersionVariant(QtTarget target, QtArch arch) {
@@ -183,6 +190,14 @@ public static class QtHelper {
 			return arch.Value.StartsWithOrdinal(stripPrefix) ? arch.Value[stripPrefix.Length..] : "";
 		}
 		return "";
+	}
+
+	public static bool UsesAllOsHost(QtTarget target, QtVersion version) {
+		return target.Value switch {
+			"wasm" when version.IsAtLeast(6, 7, 0) => true,
+			"android" when version.IsAtLeast(6, 7, 0) => true,
+			_ => false
+		};
 	}
 
 	public static QtHost DetectMachineHost() {
@@ -210,13 +225,14 @@ public static class QtHelper {
 		return new QtHost(hostValue);
 	}
 
-	public static AutoDesktopConfiguration? GetAutoDesktopConfiguration(QtHost host, QtTarget target, QtVersion version, QtArch arch) {
-		QtHost desktopHost = host.Value == "all_os" ? DetectMachineHost() : host;
+	public static AutoDesktopConfiguration? GetAutoDesktopConfiguration(QtHost host, QtTarget target,
+		QtVersion version, QtArch arch, QtHost? preferredDesktopHost = null)
+	{
+		QtHost desktopHost = host.Value == "all_os" ? preferredDesktopHost ?? DetectMachineHost() : host;
 		QtArch? desktopArch = null;
-		QtArch GetDefaultDesktopArch() =>
-			GetDefaultArch(desktopHost, new QtTarget("desktop"), version);
+		QtArch GetDefaultDesktopArch() => GetDefaultArch(desktopHost, new QtTarget("desktop"), version);
 		if (target.Value == "desktop" && desktopHost.Value == "windows") {
-			string armSuffix = version.ToVersion() >= new Version(6, 8, 0) ? "_arm64_cross_compiled" : "_arm64";
+			string armSuffix = version.IsAtLeast(6, 8, 0) ? "_arm64_cross_compiled" : "_arm64";
 			if (arch.Value.EndsWithOrdinal(armSuffix)) {
 				desktopArch = new QtArch($"{arch.Value[..^armSuffix.Length]}_64");
 			}
