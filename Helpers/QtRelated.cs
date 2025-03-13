@@ -240,7 +240,7 @@ public static class QtHelper {
 		else if (target.Value == "ios" && desktopHost.Value == "mac") {
 			desktopArch = GetDefaultDesktopArch();
 		}
-		else if (target.Value == "wasm" || target.Value == "android") {
+		else if (target.Value is "wasm" or "android") {
 			desktopArch = desktopHost.Value == "windows" ? new QtArch("win64_mingw") :
 				GetDefaultDesktopArch();
 		}

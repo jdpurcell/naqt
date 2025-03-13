@@ -40,4 +40,10 @@ Already using `jurplel/install-qt-action`? Just change it to use my fork on the 
 ```
 
 ## Limitations
-Does not support installation of modules that were moved to extensions in Qt 6.8 such as `qtwebengine` and `qtpdf`. Also doesn't support installation of Qt tools, source code, documentation, or examples. If you need any of these features, use the excellent [aqtinstall](https://github.com/miurahr/aqtinstall) instead.
+* The full version number (major.minor.patch, no wildcards) must be specified.
+* Cannot install modules that were moved to extensions in Qt 6.8 such as `qtwebengine` and `qtpdf`.
+* Cannot install Qt tools, source code, documentation, or examples.
+* When cross-compiling (e.g. WASM, Android, iOS), Qt must be installed in a single step with `--autodesktop` for the patching to work properly. `install-qt-action` always passes this flag; just avoid separate steps for the host and target installs.
+* WASM can only be installed for Qt 6.7 or newer.
+
+If you need any of these features, use the excellent [aqtinstall](https://github.com/miurahr/aqtinstall) instead.
