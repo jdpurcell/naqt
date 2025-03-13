@@ -63,6 +63,7 @@ internal static class Program {
 		WriteLine("      [--outputdir <directory>]");
 		WriteLine("      [--modules <module> [<module>...]]");
 		WriteLine("      [--archives <archive> [<archive>...]]");
+		WriteLine("      [--extensions <extension> [<extension>...]]");
 		WriteLine("      [--autodesktop]");
 		WriteLine("      [--nohash]");
 		WriteLine();

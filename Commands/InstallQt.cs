@@ -17,6 +17,7 @@ public class InstallQtOptions : ICommandOptions {
 	public string OutputDir { get; set; } = "";
 	public List<string> Modules { get; set; } = [];
 	public List<string> Archives { get; set; } = [];
+	public List<string> Extensions { get; set; } = [];
 	public bool AutoDesktop { get; set; }
 	public bool NoHash { get; set; }
 
@@ -45,6 +46,9 @@ public class InstallQtOptions : ICommandOptions {
 					break;
 				case "--archives":
 					Archives = GetListValues();
+					break;
+				case "--extensions":
+					Extensions = GetListValues();
 					break;
 				case "--autodesktop":
 					AutoDesktop = true;
@@ -86,6 +90,14 @@ public class InstallQtCommand : ICommand {
 			Options.Host = new QtHost("all_os");
 		}
 
+		if (Version.IsAtLeast(6, 8, 0) && Options.Modules.Intersect(QtHelper.KnownExtensions).Any()) {
+			Options.Extensions.AddRange(Options.Modules.Intersect(QtHelper.KnownExtensions));
+			Options.Modules = Options.Modules.Except(QtHelper.KnownExtensions).ToList();
+		}
+		else if (Version.IsUnder(6, 8, 0) && Options.Extensions.Any()) {
+			throw new Exception("Extensions don't exist in this Qt version.");
+		}
+
 		Logger.Write($"Selected configuration: {Host} {Target} {Version} {Arch}");
 		string updateDirectoryUrl = QtHelper.GetUpdateDirectoryUrl(Host, Target, Version, Arch);
 		QtUpdate update = await QtHelper.FetchUpdate(updateDirectoryUrl, Options.NoHash, cancellationToken);
@@ -102,6 +114,9 @@ public class InstallQtCommand : ICommand {
 				DesktopHost = preferredDesktopHost ?? desktopConfig.Host;
 				DesktopArch = desktopConfig.Arch;
 				Logger.Write($"Desktop configuration: {DesktopHost} desktop {Version} {DesktopArch}");
+				if (Options.Extensions.Any()) {
+					throw new Exception("Extensions aren't supported when cross-compiling.");
+				}
 				QtUpdate desktopUpdate;
 				if (Host == DesktopHost && Target.Value == "desktop") {
 					desktopUpdateDirectoryUrl = updateDirectoryUrl;
@@ -118,7 +133,7 @@ public class InstallQtCommand : ICommand {
 
 		string downloadDirectory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
 		List<Download> downloads = [];
-		void AddDownload(QtUpdate.Package package, bool forAutoDesktop) {
+		void AddDownload(QtUpdate.Package package, string updateDirUrl) {
 			downloads.AddRange(
 				from archive in package.Archives
 				let shouldSkip =
@@ -126,21 +141,28 @@ public class InstallQtCommand : ICommand {
 					!archive.MatchesShortName("qtbase") &&
 					!Options.Archives.Any(archive.MatchesShortName)
 				where !shouldSkip
-				select new Download(archive, package, forAutoDesktop ? desktopUpdateDirectoryUrl! : updateDirectoryUrl)
+				select new Download(archive, package, updateDirUrl)
 			);
 		}
-		AddDownload(basePackage, false);
+		AddDownload(basePackage, updateDirectoryUrl);
 		foreach (string moduleName in Options.Modules) {
 			QtModule module = modulesByName.GetValueOrDefault(moduleName) ??
 				throw new Exception($"Module {moduleName} not found.");
-			AddDownload(module.Package, false);
+			AddDownload(module.Package, updateDirectoryUrl);
+		}
+		foreach (string extensionName in Options.Extensions) {
+			string extensionUpdateDirectoryUrl = QtHelper.GetExtensionUpdateDirectoryUrl(Host, Version, Arch, extensionName);
+			QtUpdate extensionUpdate = await QtHelper.FetchUpdate(extensionUpdateDirectoryUrl, Options.NoHash, cancellationToken);
+			foreach (QtUpdate.Package extensionPackage in extensionUpdate.Packages.Where(p => p.Name.EndsWithOrdinal($".{Arch.Value}"))) {
+				AddDownload(extensionPackage, extensionUpdateDirectoryUrl);
+			}
 		}
 		if (DesktopArch is not null) {
-			AddDownload(desktopBasePackage!, true);
+			AddDownload(desktopBasePackage!, desktopUpdateDirectoryUrl!);
 			foreach (string moduleName in Options.Modules) {
 				QtModule module = desktopModulesByName!.GetValueOrDefault(moduleName) ??
 					throw new Exception($"Module {moduleName} not found.");
-				AddDownload(module.Package, true);
+				AddDownload(module.Package, desktopUpdateDirectoryUrl!);
 			}
 		}
 		Download FindQtbaseDownload(QtUpdate.Package package) =>

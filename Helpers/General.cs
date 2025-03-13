@@ -105,6 +105,10 @@ public static class GeneralExtensionMethods {
 		return str.EndsWith(value, StringComparison.Ordinal);
 	}
 
+	public static string? StripPrefix(this string str, string prefix, StringComparison comparison = StringComparison.Ordinal) {
+		return str.StartsWith(prefix, comparison) ? str[prefix.Length..] : null;
+	}
+
 	public static IEnumerable<string> ExceptEmpty(this IEnumerable<string> collection) {
 		return collection.Where(n => n.Length != 0);
 	}

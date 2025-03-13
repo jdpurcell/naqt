@@ -18,6 +18,7 @@ Commands
       [--outputdir <directory>]
       [--modules <module> [<module>...]]
       [--archives <archive> [<archive>...]]
+      [--extensions <extension> [<extension>...]]
       [--autodesktop]
       [--nohash]
 
@@ -29,7 +30,7 @@ Commands
 The syntax is mostly compatible with `aqtinstall` so you can use [this site](https://ddalcino.github.io/aqt-list-server/) to help, although note that short argument names (e.g. `-m`) aren't supported.
 
 ## GitHub Actions
-Already using `jurplel/install-qt-action`? Just change it to use my fork on the `v5` branch and set the `use-naqt` option to `true`. You can also set `setup-python` to `false` since this tool doesn't need it. Example:
+Already using `jurplel/install-qt-action`? Just change it to use [my fork](https://github.com/jdpurcell/install-qt-action) on the `v5` branch and set the `use-naqt` option to `true`. You can also set `setup-python` to `false` since this tool doesn't need it. Example:
 ```yaml
 - name: Install Qt
   uses: jdpurcell/install-qt-action@v5
@@ -41,9 +42,9 @@ Already using `jurplel/install-qt-action`? Just change it to use my fork on the 
 
 ## Limitations
 * The full version number (major.minor.patch, no wildcards) must be specified.
-* Cannot install modules that were moved to extensions in Qt 6.8 such as `qtwebengine` and `qtpdf`.
 * Cannot install Qt tools, source code, documentation, or examples.
 * When cross-compiling (e.g. WASM, Android, iOS), Qt must be installed in a single step with `--autodesktop` for the patching to work properly. `install-qt-action` always passes this flag; just avoid separate steps for the host and target installs.
+* Extensions such as `qtwebengine` and `qtpdf` are not installable when cross-compiling.
 * WASM can only be installed for Qt 6.7 or newer.
 
 If you need any of these features, use the excellent [aqtinstall](https://github.com/miurahr/aqtinstall) instead.

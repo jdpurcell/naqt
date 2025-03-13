@@ -71,7 +71,7 @@ public record QtVersion(int Major, int Minor, int Revision) {
 	public bool IsAtLeast(int major, int minor, int revision) =>
 		ToVersion() >= new Version(major, minor, revision);
 
-	public bool IsLessThan(int major, int minor, int revision) =>
+	public bool IsUnder(int major, int minor, int revision) =>
 		ToVersion() < new Version(major, minor, revision);
 
 	public string ToUrlComponent(string variant) {
@@ -106,6 +106,8 @@ public class QtUpdate {
 }
 
 public static class QtHelper {
+	public static readonly string[] KnownExtensions = ["qtwebengine", "qtpdf"];
+
 	public static string GetUpdateDirectoryUrl(QtHost host, QtTarget target, QtVersion version, QtArch? arch = null) {
 		string hostComponent = host.ToUrlComponent();
 		string targetComponent = target.ToUrlComponent();
@@ -115,6 +117,13 @@ public static class QtHelper {
 		}
 		string versionComponent = version.ToUrlComponent(versionVariant);
 		return $"{Constants.TrustedMirror}/online/qtsdkrepository/{hostComponent}/{targetComponent}/{versionComponent}/";
+	}
+
+	public static string GetExtensionUpdateDirectoryUrl(QtHost host, QtVersion version, QtArch arch, string extensionName) {
+		string hostComponent = host.ToUrlComponent();
+		string versionComponent = version.ToStringNoDots();
+		string archComponent = GetExtensionArch(host, arch);
+		return $"{Constants.TrustedMirror}/online/qtsdkrepository/{hostComponent}/extensions/{extensionName}/{versionComponent}/{archComponent}/";
 	}
 
 	public static async Task<QtUpdate> FetchUpdate(string updateDirectoryUrl, bool noHash = false, CancellationToken cancellationToken = default) {
@@ -186,8 +195,8 @@ public static class QtHelper {
 			return arch.Value;
 		}
 		if (target.Value == "android") {
-			string stripPrefix = "android_";
-			return arch.Value.StartsWithOrdinal(stripPrefix) ? arch.Value[stripPrefix.Length..] : "";
+			return arch.Value == "unspecified" ? arch.Value :
+				arch.Value.StripPrefix("android_") ?? "";
 		}
 		return "";
 	}
@@ -198,6 +207,22 @@ public static class QtHelper {
 			"android" when version.IsAtLeast(6, 7, 0) => true,
 			_ => false
 		};
+	}
+
+	public static string GetExtensionArch(QtHost host, QtArch arch) {
+		string? extensionArch;
+		if (host.IsWindows) {
+			extensionArch = arch.Value.StripPrefix("win64_");
+		}
+		else {
+			extensionArch = (host.Value, arch.Value) switch {
+				("mac", "clang_64") => "clang_64",
+				("linux", "linux_gcc_64") => "x86_64",
+				("linux_arm64", "linux_gcc_arm64") => "arm64",
+				_ => null
+			};
+		}
+		return extensionArch ?? throw new Exception("Unrecognized architecture for extensions.");
 	}
 
 	public static QtHost DetectMachineHost() {
