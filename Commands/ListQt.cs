@@ -44,7 +44,7 @@ public class ListQtCommand : ICommand {
 	}
 
 	public async Task RunAsync(CancellationToken cancellationToken = default) {
-		string updateDirectoryUrl = QtHelper.GetUpdateDirectoryUrl(Host, Target, Version);
+		string updateDirectoryUrl = QtHelper.GetUpdateDirectoryUrl(Host, Target, Version, Arch);
 		QtUpdate update = await QtHelper.FetchUpdate(updateDirectoryUrl, Options.NoHash, cancellationToken);
 		if (Arch is null) {
 			foreach (QtArch arch in update.GetArchitectures()) {

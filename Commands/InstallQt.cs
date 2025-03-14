@@ -98,15 +98,22 @@ public class InstallQtCommand : ICommand {
 			throw new Exception("Extensions don't exist in this Qt version.");
 		}
 
-		Logger.Write($"Selected configuration: {Host} {Target} {Version} {Arch}");
-		string updateDirectoryUrl = QtHelper.GetUpdateDirectoryUrl(Host, Target, Version, Arch);
-		QtUpdate update = await QtHelper.FetchUpdate(updateDirectoryUrl, Options.NoHash, cancellationToken);
-		QtUpdate.Package basePackage = update.GetBasePackage(Arch);
-		Dictionary<string, QtModule> modulesByName = update.GetModules(Arch).ToDictionary(m => m.Name);
+		Dictionary<string, QtUpdate> qtUpdateByDirectoryUrl = new();
+		async Task<Update> FetchUpdate(QtHost host, QtTarget target, QtArch arch) {
+			string updateDirectoryUrl = QtHelper.GetUpdateDirectoryUrl(host, target, Version, arch);
+			QtUpdate update = qtUpdateByDirectoryUrl.GetValueOrDefault(updateDirectoryUrl) ??
+				await QtHelper.FetchUpdate(updateDirectoryUrl, Options.NoHash, cancellationToken);
+			qtUpdateByDirectoryUrl[updateDirectoryUrl] = update;
+			return new Update(
+				updateDirectoryUrl,
+				update.GetBasePackage(arch),
+				update.GetModules(arch).ToDictionary(m => m.Name)
+			);
+		}
 
-		string? desktopUpdateDirectoryUrl = null;
-		QtUpdate.Package? desktopBasePackage = null;
-		Dictionary<string, QtModule>? desktopModulesByName = null;
+		Logger.Write($"Selected configuration: {Host} {Target} {Version} {Arch}");
+		Update primaryUpdate = await FetchUpdate(Host, Target, Arch);
+		Update? desktopUpdate = null;
 		if (Options.AutoDesktop) {
 			AutoDesktopConfiguration? desktopConfig =
 				QtHelper.GetAutoDesktopConfiguration(Host, Target, Version, Arch, preferredDesktopHost);
@@ -114,26 +121,15 @@ public class InstallQtCommand : ICommand {
 				DesktopHost = preferredDesktopHost ?? desktopConfig.Host;
 				DesktopArch = desktopConfig.Arch;
 				Logger.Write($"Desktop configuration: {DesktopHost} desktop {Version} {DesktopArch}");
-				if (Options.Extensions.Any()) {
-					throw new Exception("Extensions aren't supported when cross-compiling.");
-				}
-				QtUpdate desktopUpdate;
-				if (Host == DesktopHost && Target.Value == "desktop") {
-					desktopUpdateDirectoryUrl = updateDirectoryUrl;
-					desktopUpdate = update;
-				}
-				else {
-					desktopUpdateDirectoryUrl = QtHelper.GetUpdateDirectoryUrl(DesktopHost, new QtTarget("desktop"), Version, DesktopArch);
-					desktopUpdate = await QtHelper.FetchUpdate(desktopUpdateDirectoryUrl, Options.NoHash, cancellationToken);
-				}
-				desktopBasePackage = desktopUpdate.GetBasePackage(DesktopArch);
-				desktopModulesByName = desktopUpdate.GetModules(DesktopArch).ToDictionary(m => m.Name);
+				desktopUpdate = await FetchUpdate(DesktopHost, new QtTarget("desktop"), DesktopArch);
 			}
 		}
 
 		string downloadDirectory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
 		List<Download> downloads = [];
-		void AddDownload(QtUpdate.Package package, string updateDirUrl) {
+		HashSet<string> locatedModules = new();
+		HashSet<string> locatedExtensions = new();
+		void AddDownload(QtUpdate.Package package, string updateDirectoryUrl) {
 			downloads.AddRange(
 				from archive in package.Archives
 				let shouldSkip =
@@ -141,34 +137,49 @@ public class InstallQtCommand : ICommand {
 					!archive.MatchesShortName("qtbase") &&
 					!Options.Archives.Any(archive.MatchesShortName)
 				where !shouldSkip
-				select new Download(archive, package, updateDirUrl)
+				select new Download(archive, package, updateDirectoryUrl)
 			);
 		}
-		AddDownload(basePackage, updateDirectoryUrl);
-		foreach (string moduleName in Options.Modules) {
-			QtModule module = modulesByName.GetValueOrDefault(moduleName) ??
-				throw new Exception($"Module {moduleName} not found.");
-			AddDownload(module.Package, updateDirectoryUrl);
-		}
-		foreach (string extensionName in Options.Extensions) {
-			string extensionUpdateDirectoryUrl = QtHelper.GetExtensionUpdateDirectoryUrl(Host, Version, Arch, extensionName);
-			QtUpdate extensionUpdate = await QtHelper.FetchUpdate(extensionUpdateDirectoryUrl, Options.NoHash, cancellationToken);
-			foreach (QtUpdate.Package extensionPackage in extensionUpdate.Packages.Where(p => p.Name.EndsWithOrdinal($".{Arch.Value}"))) {
-				AddDownload(extensionPackage, extensionUpdateDirectoryUrl);
-			}
-		}
-		if (DesktopArch is not null) {
-			AddDownload(desktopBasePackage!, desktopUpdateDirectoryUrl!);
+		async Task BuildDownloadStrategy(Update update, QtHost host, QtTarget target, QtArch arch) {
+			AddDownload(update.BasePackage, update.UpdateDirectoryUrl);
 			foreach (string moduleName in Options.Modules) {
-				QtModule module = desktopModulesByName!.GetValueOrDefault(moduleName) ??
-					throw new Exception($"Module {moduleName} not found.");
-				AddDownload(module.Package, desktopUpdateDirectoryUrl!);
+				QtModule? module = update.ModulesByName.GetValueOrDefault(moduleName);
+				if (module is null) {
+					continue;
+				}
+				AddDownload(module.Package, update.UpdateDirectoryUrl);
+				locatedModules.Add(moduleName);
+			}
+			foreach (string extensionName in Options.Extensions) {
+				string extUpdateDirectoryUrl = QtHelper.GetExtensionUpdateDirectoryUrl(host, target, Version, arch, extensionName);
+				QtUpdate extUpdate = await QtHelper.FetchUpdate(extUpdateDirectoryUrl, Options.NoHash, cancellationToken, allowNotFound: true);
+				if (ReferenceEquals(extUpdate, QtHelper.UpdateNotFound)) {
+					continue;
+				}
+				foreach (QtUpdate.Package extensionPackage in extUpdate.Packages.Where(p => p.Name.EndsWithOrdinal($".{arch.Value}"))) {
+					AddDownload(extensionPackage, extUpdateDirectoryUrl);
+				}
+				locatedExtensions.Add(extensionName);
 			}
 		}
+		await BuildDownloadStrategy(primaryUpdate, Host, Target, Arch);
+		if (DesktopArch is not null) {
+			await BuildDownloadStrategy(desktopUpdate!, DesktopHost!, new QtTarget("desktop"), DesktopArch);
+		}
+
+		// As long as each module or extension was found for either the target or
+		// host it is considered successful; only error if not found entirely
+		if (Options.Modules.Except(locatedModules).Any()) {
+			throw new Exception($"Modules not found: {String.Join(", ", Options.Modules.Except(locatedModules))}");
+		}
+		if (Options.Extensions.Except(locatedExtensions).Any()) {
+			throw new Exception($"Extensions not found: {String.Join(", ", Options.Extensions.Except(locatedExtensions))}");
+		}
+
 		Download FindQtbaseDownload(QtUpdate.Package package) =>
 			downloads.Single(d => d.Package == package && d.Archive.MatchesShortName("qtbase"));
-		Download baseDownload = FindQtbaseDownload(basePackage);
-		Download? desktopBaseDownload = desktopBasePackage?.With(FindQtbaseDownload);
+		Download baseDownload = FindQtbaseDownload(primaryUpdate.BasePackage);
+		Download? desktopBaseDownload = desktopUpdate?.BasePackage.With(FindQtbaseDownload);
 
 		object createDirectorySync = new();
 		HashSet<string> directoriesPendingDeletion = [downloadDirectory];
@@ -370,6 +381,12 @@ public class InstallQtCommand : ICommand {
 			}
 		}
 	}
+
+	private record Update(
+		string UpdateDirectoryUrl,
+		QtUpdate.Package BasePackage,
+		Dictionary<string, QtModule> ModulesByName
+	);
 
 	private record Download(QtUpdate.Archive Archive, QtUpdate.Package Package, string UpdateDirectoryUrl) {
 		public string GetUrl() =>

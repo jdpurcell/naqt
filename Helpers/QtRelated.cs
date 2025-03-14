@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -108,6 +110,8 @@ public class QtUpdate {
 public static class QtHelper {
 	public static readonly string[] KnownExtensions = ["qtwebengine", "qtpdf"];
 
+	public static readonly QtUpdate UpdateNotFound = new() { Packages = [] };
+
 	public static string GetUpdateDirectoryUrl(QtHost host, QtTarget target, QtVersion version, QtArch? arch = null) {
 		string hostComponent = host.ToUrlComponent();
 		string targetComponent = target.ToUrlComponent();
@@ -119,18 +123,25 @@ public static class QtHelper {
 		return $"{Constants.TrustedMirror}/online/qtsdkrepository/{hostComponent}/{targetComponent}/{versionComponent}/";
 	}
 
-	public static string GetExtensionUpdateDirectoryUrl(QtHost host, QtVersion version, QtArch arch, string extensionName) {
+	public static string GetExtensionUpdateDirectoryUrl(QtHost host, QtTarget target, QtVersion version, QtArch arch, string extensionName) {
 		string hostComponent = host.ToUrlComponent();
 		string versionComponent = version.ToStringNoDots();
-		string archComponent = GetExtensionArch(host, arch);
+		string archComponent = GetExtensionArch(host, target, version, arch);
 		return $"{Constants.TrustedMirror}/online/qtsdkrepository/{hostComponent}/extensions/{extensionName}/{versionComponent}/{archComponent}/";
 	}
 
-	public static async Task<QtUpdate> FetchUpdate(string updateDirectoryUrl, bool noHash = false, CancellationToken cancellationToken = default) {
+	public static async Task<QtUpdate> FetchUpdate(
+		string updateDirectoryUrl, bool noHash = false, CancellationToken cancellationToken = default, bool allowNotFound = false
+	) {
 		string url = $"{updateDirectoryUrl}Updates.xml";
-		byte[] expectedHash = noHash ? Network.DummySha256Hash : await Network.GetPublishedSha256ForFileAsync(url, cancellationToken);
-		string updateXml = await Network.GetAsUtf8StringWithSha256ValidationAsync(url, expectedHash, cancellationToken);
-		return ParseUpdate(updateXml);
+		try {
+			byte[] expectedHash = noHash ? Network.DummySha256Hash : await Network.GetPublishedSha256ForFileAsync(url, cancellationToken);
+			string updateXml = await Network.GetAsUtf8StringWithSha256ValidationAsync(url, expectedHash, cancellationToken);
+			return ParseUpdate(updateXml);
+		}
+		catch (HttpRequestException ex) when (allowNotFound && ex.StatusCode == HttpStatusCode.NotFound) {
+			return UpdateNotFound;
+		}
 	}
 
 	private static QtUpdate ParseUpdate(string xmlContents) {
@@ -209,12 +220,18 @@ public static class QtHelper {
 		};
 	}
 
-	public static string GetExtensionArch(QtHost host, QtArch arch) {
-		string? extensionArch;
-		if (host.IsWindows) {
-			extensionArch = arch.Value.StripPrefix("win64_");
+	public static string GetExtensionArch(QtHost host, QtTarget target, QtVersion version, QtArch arch) {
+		string? extensionArch = null;
+		if (target.Value == "android") {
+			extensionArch = arch.Value.StripPrefix("android_")?.With(a => $"qt{version.Major}_{version.ToStringNoDots()}_" + a);
 		}
-		else {
+		else if (target.Value is "ios" or "wasm") {
+			extensionArch = arch.Value;
+		}
+		else if (host.IsWindows && target.Value == "desktop") {
+			extensionArch = arch.Value.StripPrefix("win64_")?.Replace("_arm64_cross_compiled", "_arm64");
+		}
+		else if (target.Value == "desktop") {
 			extensionArch = (host.Value, arch.Value) switch {
 				("mac", "clang_64") => "clang_64",
 				("linux", "linux_gcc_64") => "x86_64",

@@ -44,7 +44,6 @@ Already using `jurplel/install-qt-action`? Just change it to use [my fork](https
 * The full version number (major.minor.patch, no wildcards) must be specified.
 * Cannot install Qt tools, source code, documentation, or examples.
 * When cross-compiling (e.g. WASM, Android, iOS), Qt must be installed in a single step with `--autodesktop` for the patching to work properly. `install-qt-action` always passes this flag; just avoid separate steps for the host and target installs.
-* Extensions such as `qtwebengine` and `qtpdf` are not installable when cross-compiling.
 * WASM can only be installed for Qt 6.7 or newer.
 
 If you need any of these features, use the excellent [aqtinstall](https://github.com/miurahr/aqtinstall) instead.
