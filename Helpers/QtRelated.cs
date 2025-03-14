@@ -38,10 +38,10 @@ public record QtHost(string Value) {
 public record QtTarget(string Value) {
 	public override string ToString() => Value;
 
-	public string ToUrlComponent() {
+	public string ToUrlComponent(QtVersion version) {
 		return Value switch {
 			"desktop" => "desktop",
-			"wasm" => "wasm",
+			"wasm" => version.IsAtLeast(6, 7, 0) ? "wasm" : "desktop",
 			"android" => "android",
 			"ios" => "ios",
 			_ => throw new ArgumentException("Target value is not recognized.")
@@ -114,8 +114,8 @@ public static class QtHelper {
 
 	public static string GetUpdateDirectoryUrl(QtHost host, QtTarget target, QtVersion version, QtArch? arch = null) {
 		string hostComponent = host.ToUrlComponent();
-		string targetComponent = target.ToUrlComponent();
-		string versionVariant = GetUrlVersionVariant(target, arch ?? new QtArch("unspecified"));
+		string targetComponent = target.ToUrlComponent(version);
+		string versionVariant = GetUrlVersionVariant(target, version, arch ?? new QtArch("unspecified"));
 		if (versionVariant == "unspecified") {
 			throw new ArgumentException("Listing architectures for this target is not supported.");
 		}
@@ -201,9 +201,9 @@ public static class QtHelper {
 			throw new ArgumentException("Unable to determine a default architecture for this host.");
 	}
 
-	public static string GetUrlVersionVariant(QtTarget target, QtArch arch) {
+	public static string GetUrlVersionVariant(QtTarget target, QtVersion version, QtArch arch) {
 		if (target.Value == "wasm") {
-			return arch.Value;
+			return version.IsAtLeast(6, 5, 0) ? arch.Value : "wasm";
 		}
 		if (target.Value == "android") {
 			return arch.Value == "unspecified" ? arch.Value :
