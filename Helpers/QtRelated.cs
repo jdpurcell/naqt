@@ -288,6 +288,36 @@ public static class QtHelper {
 		}
 		return desktopArch != null ? new AutoDesktopConfiguration(desktopHost, desktopArch) : null;
 	}
+
+	public static string InferArchDirectoryName(QtHost host, QtTarget target, QtVersion version, QtArch arch) {
+		string? directoryName = null;
+		if (target.Value == "desktop") {
+			if (host.IsWindows) {
+				if (arch.Value.StartsWithOrdinal("win64_msvc")) {
+					directoryName = arch.Value.StripPrefix("win64_")!.Replace("_cross_compiled", "");
+				}
+				else if (arch.Value.StartsWithOrdinal("win32_msvc")) {
+					directoryName = arch.Value.StripPrefix("win32_");
+				}
+				else if (arch.Value.StartsWithOrdinal("win64_mingw")) {
+					directoryName = arch.Value.StripPrefix("win64_") + "_64";
+				}
+				else if (arch.Value.StartsWithOrdinal("win32_mingw")) {
+					directoryName = arch.Value.StripPrefix("win32_") + "_32";
+				}
+				else if (arch.Value.StartsWithOrdinal("win64_llvm_")) {
+					directoryName = "llvm-" + arch.Value.StripPrefix("win64_llvm_") + "_64";
+				}
+			}
+			else if (host.IsLinux && arch.Value.StartsWithOrdinal("linux_")) {
+				directoryName = arch.Value.StripPrefix("linux_");
+			}
+			else if (host.IsMacOS && arch.Value == "clang_64" && version.IsAtLeast(6, 1, 2)) {
+				directoryName = "macos";
+			}
+		}
+		return directoryName ?? arch.Value;
+	}
 }
 
 public record AutoDesktopConfiguration(QtHost Host, QtArch Arch);

@@ -114,12 +114,12 @@ public class InstallQtCommand : ICommand {
 		Logger.Write($"Selected configuration: {Host} {Target} {Version} {Arch}");
 		Update primaryUpdate = await FetchUpdate(Host, Target, Arch);
 		Update? desktopUpdate = null;
-		if (Options.AutoDesktop) {
-			AutoDesktopConfiguration? desktopConfig =
-				QtHelper.GetAutoDesktopConfiguration(Host, Target, Version, Arch, preferredDesktopHost);
-			if (desktopConfig is not null) {
-				DesktopHost = preferredDesktopHost ?? desktopConfig.Host;
-				DesktopArch = desktopConfig.Arch;
+		AutoDesktopConfiguration? desktopConfig =
+			QtHelper.GetAutoDesktopConfiguration(Host, Target, Version, Arch, preferredDesktopHost);
+		if (desktopConfig is not null) {
+			DesktopHost = preferredDesktopHost ?? desktopConfig.Host;
+			DesktopArch = desktopConfig.Arch;
+			if (Options.AutoDesktop) {
 				Logger.Write($"Desktop configuration: {DesktopHost} desktop {Version} {DesktopArch}");
 				desktopUpdate = await FetchUpdate(DesktopHost, new QtTarget("desktop"), DesktopArch);
 			}
@@ -163,8 +163,8 @@ public class InstallQtCommand : ICommand {
 			}
 		}
 		await BuildDownloadStrategy(primaryUpdate, Host, Target, Arch);
-		if (DesktopArch is not null) {
-			await BuildDownloadStrategy(desktopUpdate!, DesktopHost!, new QtTarget("desktop"), DesktopArch);
+		if (desktopUpdate is not null) {
+			await BuildDownloadStrategy(desktopUpdate, DesktopHost!, new QtTarget("desktop"), DesktopArch!);
 		}
 
 		// As long as each module or extension was found for either the target or
@@ -270,12 +270,25 @@ public class InstallQtCommand : ICommand {
 				Logger.Write($"Extracted {download.Archive.FileName}");
 			});
 
-		if (desktopInstallDirectory is null) {
-			PatchInstall(installDirectory);
+		if (desktopConfig is null) {
+			// Straightforward patch of this self-sufficient installation
+			PatchInstall(new AutonomousInstallation(installDirectory));
 		}
 		else {
-			PatchInstall(installDirectory, desktopInstallDirectory);
-			PatchInstall(desktopInstallDirectory);
+			// This installation requires a separate host installation
+			if (desktopInstallDirectory is null) {
+				// Host installation wasn't simultaneous; just patch this installation
+				// and do our best to infer its host location
+				string inferredDesktopInstallDirectory = GetInstallDirectory(
+					QtHelper.InferArchDirectoryName(DesktopHost!, new QtTarget("desktop"), Version, DesktopArch!)
+				);
+				PatchInstall(new CrossCompileInstallation(installDirectory, inferredDesktopInstallDirectory));
+			}
+			else {
+				// Patch both installations which we just completed together
+				PatchInstall(new CrossCompileInstallation(installDirectory, desktopInstallDirectory));
+				PatchInstall(new AutonomousInstallation(desktopInstallDirectory));
+			}
 		}
 
 		directoriesPendingDeletion.Remove(installDirectory);
@@ -285,7 +298,7 @@ public class InstallQtCommand : ICommand {
 		Logger.Write($"Finished in {runElapsedTime.TotalSeconds:F3} seconds");
 	}
 
-	private void PatchInstall(string installDirectory, string? desktopInstallDirectory = null) {
+	private void PatchInstall(IInstallation installation) {
 		void PatchConfigFile(string confPath, (string Prefix, string UpdatedRemainder)[] updates) {
 			string confContent = File.ReadAllText(confPath);
 			bool changedConf = false;
@@ -301,6 +314,8 @@ public class InstallQtCommand : ICommand {
 			}
 		}
 
+		string installDirectory = installation.InstallDirectory;
+
 		// Patch qconfig.pri
 		PatchConfigFile(
 			Path.Combine(installDirectory, "mkspecs", "qconfig.pri"),
@@ -315,7 +330,7 @@ public class InstallQtCommand : ICommand {
 		File.WriteAllLines(qtConfPath, ["[Paths]", "Prefix=.."]);
 		Logger.Write($"Created {qtConfPath}");
 
-		if (desktopInstallDirectory is null) {
+		if (installation is AutonomousInstallation) {
 			if ((DesktopHost ?? Host).IsWindows) {
 				// Create qtenv2.bat
 				string qtEnv2Path = Path.Combine(installDirectory, "bin", "qtenv2.bat");
@@ -336,48 +351,48 @@ public class InstallQtCommand : ICommand {
 			foreach (string pkgConfigPath in pkgConfigPaths) {
 				PatchConfigFile(pkgConfigPath, [("prefix=", installDirectory)]);
 			}
-
-			// Return early; remaining code is for a cross-compilation install
-			return;
 		}
+		else if (installation is CrossCompileInstallation crossCompileInstallation) {
+			string desktopInstallDirectory = crossCompileInstallation.DesktopInstallDirectory;
 
-		if (Version.IsAtLeast(6, 0, 0)) {
-			// Patch target_qt.conf
-			PatchConfigFile(
-				Path.Combine(installDirectory, "bin", "target_qt.conf"),
-				[
-					("HostData=", $"../{Path.GetFileName(installDirectory)}"),
-					("HostPrefix=", $"../../{Path.GetFileName(desktopInstallDirectory)}"),
-					("HostLibraryExecutables=", DesktopHost!.IsWindows ? "./bin" : "./libexec")
-				]
-			);
-		}
+			if (Version.IsAtLeast(6, 0, 0)) {
+				// Patch target_qt.conf
+				PatchConfigFile(
+					Path.Combine(installDirectory, "bin", "target_qt.conf"),
+					[
+						("HostData=", $"../{Path.GetFileName(installDirectory)}"),
+						("HostPrefix=", $"../../{Path.GetFileName(desktopInstallDirectory)}"),
+						("HostLibraryExecutables=", DesktopHost!.IsWindows ? "./bin" : "./libexec")
+					]
+				);
+			}
 
-		// Patch qmake/qtpaths scripts
-		IEnumerable<string> scriptPaths =
-			from name in new[] { "qmake", "qtpaths", $"qmake{Version.Major}", $"qtpaths{Version.Major}" }
-			from extension in new[] { "", ".bat" }
-			select Path.Combine(installDirectory, "bin", name + extension);
-		string[] placeholders = [
-			"/Users/qt/work/install/",
-			"/home/qt/work/install/"
-		];
-		foreach (string scriptPath in scriptPaths) {
-			if (!File.Exists(scriptPath)) {
-				continue;
-			}
-			string scriptContent = File.ReadAllText(scriptPath);
-			bool changedScript = false;
-			string correctValue = Path.Combine(desktopInstallDirectory, ".")[..^1]; // Add trailing slash
-			foreach (string placeholder in placeholders) {
-				string originalInstance = scriptContent;
-				scriptContent = scriptContent.Replace(placeholder, correctValue)
-					.Replace(placeholder.Replace('/', '\\'), correctValue);
-				changedScript |= !ReferenceEquals(scriptContent, originalInstance);
-			}
-			if (changedScript) {
-				File.WriteAllText(scriptPath, scriptContent);
-				Logger.Write($"Patched {scriptPath}");
+			// Patch qmake/qtpaths scripts
+			IEnumerable<string> scriptPaths =
+				from name in new[] { "qmake", "qtpaths", $"qmake{Version.Major}", $"qtpaths{Version.Major}" }
+				from extension in new[] { "", ".bat" }
+				select Path.Combine(installDirectory, "bin", name + extension);
+			string[] placeholders = [
+				"/Users/qt/work/install/",
+				"/home/qt/work/install/"
+			];
+			foreach (string scriptPath in scriptPaths) {
+				if (!File.Exists(scriptPath)) {
+					continue;
+				}
+				string scriptContent = File.ReadAllText(scriptPath);
+				bool changedScript = false;
+				string correctValue = Path.Combine(desktopInstallDirectory, ".")[..^1]; // Add trailing slash
+				foreach (string placeholder in placeholders) {
+					string originalInstance = scriptContent;
+					scriptContent = scriptContent.Replace(placeholder, correctValue)
+						.Replace(placeholder.Replace('/', '\\'), correctValue);
+					changedScript |= !ReferenceEquals(scriptContent, originalInstance);
+				}
+				if (changedScript) {
+					File.WriteAllText(scriptPath, scriptContent);
+					Logger.Write($"Patched {scriptPath}");
+				}
 			}
 		}
 	}
@@ -395,4 +410,14 @@ public class InstallQtCommand : ICommand {
 		public string GetLocalPath(string directory) =>
 			Path.Combine(directory, Package.GetNameWithoutVersion(), Archive.Identifier);
 	}
+
+	private interface IInstallation {
+		string InstallDirectory { get; }
+	}
+
+	private record AutonomousInstallation(string InstallDirectory)
+		: IInstallation;
+
+	private record CrossCompileInstallation(string InstallDirectory, string DesktopInstallDirectory)
+		: IInstallation;
 }

@@ -43,6 +43,6 @@ Already using `jurplel/install-qt-action`? Just change it to use [my fork](https
 ## Limitations
 * The full version number (major.minor.patch, no wildcards) must be specified.
 * Cannot install Qt tools, source code, documentation, or examples.
-* When cross-compiling (e.g. WASM, Android, iOS), Qt must be installed in a single step with `--autodesktop` for the patching to work properly. `install-qt-action` always passes this flag; just avoid separate steps for the host and target installs.
+* When cross-compiling (e.g. WASM, Android, iOS), it's recommended to perform installation in a single step with `--autodesktop`. `install-qt-action` enables this option by default. It is possible, however, to perform the host and target installations in separate steps, but do not pass `--autodesktop` in this case.
 
 If you need any of these features, use the excellent [aqtinstall](https://github.com/miurahr/aqtinstall) instead.
