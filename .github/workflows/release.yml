@@ -1,0 +1,33 @@
+name: Release
+on:
+  workflow_dispatch:
+jobs:
+  run:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    - name: Build
+      env:
+        DOTNET_NOLOGO: true
+        DOTNET_CLI_TELEMETRY_OPTOUT: true
+        DOTNET_ADD_GLOBAL_TOOLS_TO_PATH: false
+        DOTNET_GENERATE_ASPNET_CERTIFICATE: false
+        DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE: true
+      run: |
+        dotnet publish naqt.csproj -c Release -p:UseAppHost=false -o Publish
+    - name: Zip
+      if: github.ref == 'refs/heads/main'
+      uses: thedoctor0/zip-release@0.7.6
+      with:
+        directory: Publish
+        filename: naqt.zip
+    - name: Upload Release
+      if: github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: latest
+        files: Publish/naqt.zip
