@@ -1,0 +1,28 @@
+name: Test
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  run:
+    name: Test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: 'windows-latest'
+          - runner: 'ubuntu-latest'
+          - runner: 'macos-latest'
+    runs-on: ${{ matrix.runner }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    - name: Build and Run
+      env:
+        DOTNET_NOLOGO: true
+        DOTNET_CLI_TELEMETRY_OPTOUT: true
+        DOTNET_ADD_GLOBAL_TOOLS_TO_PATH: false
+        DOTNET_GENERATE_ASPNET_CERTIFICATE: false
+        DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE: true
+      shell: pwsh
+      run: |
+        dotnet run -- list-qt windows desktop 6.8.0
