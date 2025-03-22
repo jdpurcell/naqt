@@ -5,6 +5,6 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
     <ItemGroup>
-      <PackageReference Include="SharpCompress" Version="0.39.2" />
+      <PackageReference Include="SharpCompress" Version="0.39.3" />
     </ItemGroup>
 </Project>

@@ -30,19 +30,27 @@ public static class Helper {
 		using SevenZipArchive archive = SevenZipArchive.Open(archivePath);
 		HashSet<string> seenDirectories = [];
 
+		destDirectory = Path.GetFullPath(destDirectory);
 		createDirectorySync ??= new();
+
 		void CreateDirectory(string directory) {
-			if (seenDirectories.Add(directory)) {
-				lock (createDirectorySync) {
-					Directory.CreateDirectory(directory);
-				}
+			if (!seenDirectories.Add(directory)) {
+				return;
+			}
+			if (!directory.StartsWithOrdinal(destDirectory) ||
+				(directory.Length > destDirectory.Length &&
+				 directory[destDirectory.Length] != Path.DirectorySeparatorChar))
+			{
+				throw new Exception("Extracted directory would exist outside of the destination.");
+			}
+			lock (createDirectorySync) {
+				Directory.CreateDirectory(directory);
 			}
 		}
 
-		destDirectory = Path.GetFullPath(destDirectory);
 		CreateDirectory(destDirectory);
 
-		SharpCompress.Readers.IReader entries = archive.ExtractAllEntries();
+		using SharpCompress.Readers.IReader entries = archive.ExtractAllEntries();
 		while (entries.MoveToNextEntry()) {
 			cancellationToken.ThrowIfCancellationRequested();
 
@@ -53,18 +61,10 @@ public static class Helper {
 
 			string entryDestPath = Path.GetFullPath(Path.Combine(destDirectory, entry.Key));
 			if (entry.IsDirectory) {
-				if (!entryDestPath.StartsWithOrdinal(destDirectory) ||
-					(entryDestPath.Length > destDirectory.Length &&
-					 entryDestPath[destDirectory.Length] != Path.DirectorySeparatorChar))
-				{
-					throw new Exception("Extracted directory would exist outside of the destination.");
-				}
 				CreateDirectory(entryDestPath);
 			}
 			else {
-				if (!seenDirectories.Contains(Path.GetDirectoryName(entryDestPath) ?? "")) {
-					throw new Exception("File entry is missing a corresponding directory entry.");
-				}
+				CreateDirectory(Path.GetDirectoryName(entryDestPath)!);
 				int attrib = entry.ExtendedAttrib ?? 0;
 				bool hasUnixAttributes = (attrib & 0x8000) != 0;
 				bool isSymbolicLink = hasUnixAttributes && (attrib & 0x20000000) != 0;
