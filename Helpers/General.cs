@@ -15,9 +15,9 @@ public static class Constants {
 
 	public static readonly string TrustedMirror = "https://download.qt.io";
 
-	public static int DownloadConcurrency = 4;
+	public const int DownloadConcurrency = 4;
 
-	public static int ExtractConcurrency = 4;
+	public const int ExtractConcurrency = 4;
 }
 
 public static class Helper {
