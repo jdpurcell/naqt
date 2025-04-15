@@ -65,10 +65,12 @@ internal static class Program {
 		WriteLine("      [--archives <archive> [<archive>...]]");
 		WriteLine("      [--extensions <extension> [<extension>...]]");
 		WriteLine("      [--autodesktop]");
+		WriteLine("      [--mirror <baseurl>]");
 		WriteLine("      [--nohash]");
 		WriteLine();
 		WriteLine("   list-qt");
 		WriteLine("      <host> <target> <version> [<arch>]");
+		WriteLine("      [--mirror <baseurl>]");
 		WriteLine("      [--nohash]");
 	}
 }

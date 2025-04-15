@@ -8,6 +8,7 @@ public class ListQtOptions : ICommandOptions {
 	public QtTarget Target { get; set; }
 	public QtVersion Version { get; set; }
 	public QtArch? Arch { get; set; }
+	public string? Mirror { get; set; }
 	public bool NoHash { get; set; }
 
 	public ListQtOptions(CliParser cli) {
@@ -17,6 +18,9 @@ public class ListQtOptions : ICommandOptions {
 		Arch = cli.HasValueArg() ? new QtArch(cli.GetValueArg()) : null;
 		while (cli.HasSwitchArg()) {
 			switch (cli.GetSwitchArg()) {
+				case "--mirror":
+					Mirror = cli.GetValueArg();
+					break;
 				case "--nohash":
 					NoHash = true;
 					break;
@@ -44,7 +48,7 @@ public class ListQtCommand : ICommand {
 	}
 
 	public async Task RunAsync(CancellationToken cancellationToken = default) {
-		string updateDirectoryUrl = QtHelper.GetUpdateDirectoryUrl(Host, Target, Version, Arch);
+		QtUrl updateDirectoryUrl = QtHelper.GetUpdateDirectoryUrl(Host, Target, Version, Arch, customMirror: Options.Mirror);
 		QtUpdate update = await QtHelper.FetchUpdate(updateDirectoryUrl, Options.NoHash, cancellationToken);
 		if (Arch is null) {
 			foreach (QtArch arch in update.GetArchitectures()) {

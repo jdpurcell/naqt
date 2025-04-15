@@ -6,13 +6,13 @@ This tool is unofficial and not affiliated with, endorsed by, or supported by Qt
 ## Example
 Assuming you have the dotnet runtime, download [prebuilt binaries](https://github.com/jdpurcell/naqt/releases/download/latest/naqt.zip) and run:
 ```
-dotnet naqt.dll install-qt windows desktop 6.8.2 win64_msvc2022_64
+dotnet naqt.dll install-qt windows desktop 6.8.3 win64_msvc2022_64
 ```
 Or if you have the full dotnet SDK and prefer to run from source:
 ```
 git clone --recurse-submodules https://github.com/jdpurcell/naqt
 cd naqt
-dotnet run -- install-qt windows desktop 6.8.2 win64_msvc2022_64
+dotnet run -- install-qt windows desktop 6.8.3 win64_msvc2022_64
 ```
 
 ## Usage
@@ -22,13 +22,15 @@ Commands
       <host> <target> <version> [<arch>]
       [--outputdir <directory>]
       [--modules <module> [<module>...]]
-      [--archives <archive> [<archive>...]]
       [--extensions <extension> [<extension>...]]
+      [--archives <archive> [<archive>...]]
       [--autodesktop]
+      [--mirror <baseurl>]
       [--nohash]
 
    list-qt
       <host> <target> <version> [<arch>]
+      [--mirror <baseurl>]
       [--nohash]
 ```
 

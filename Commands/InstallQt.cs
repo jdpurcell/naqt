@@ -16,9 +16,10 @@ public class InstallQtOptions : ICommandOptions {
 	public QtArch? Arch { get; set; }
 	public string OutputDir { get; set; } = "";
 	public List<string> Modules { get; set; } = [];
-	public List<string> Archives { get; set; } = [];
 	public List<string> Extensions { get; set; } = [];
+	public List<string> Archives { get; set; } = [];
 	public bool AutoDesktop { get; set; }
+	public string? Mirror { get; set; }
 	public bool NoHash { get; set; }
 
 	public InstallQtOptions(CliParser cli) {
@@ -44,14 +45,17 @@ public class InstallQtOptions : ICommandOptions {
 				case "--modules":
 					Modules = GetListValues();
 					break;
-				case "--archives":
-					Archives = GetListValues();
-					break;
 				case "--extensions":
 					Extensions = GetListValues();
 					break;
+				case "--archives":
+					Archives = GetListValues();
+					break;
 				case "--autodesktop":
 					AutoDesktop = true;
+					break;
+				case "--mirror":
+					Mirror = cli.GetValueArg();
 					break;
 				case "--nohash":
 					NoHash = true;
@@ -98,9 +102,9 @@ public class InstallQtCommand : ICommand {
 			throw new Exception("Extensions don't exist in this Qt version.");
 		}
 
-		Dictionary<string, QtUpdate> qtUpdateByDirectoryUrl = new();
+		Dictionary<QtUrl, QtUpdate> qtUpdateByDirectoryUrl = new();
 		async Task<Update> FetchUpdate(QtHost host, QtTarget target, QtArch arch) {
-			string updateDirectoryUrl = QtHelper.GetUpdateDirectoryUrl(host, target, Version, arch);
+			QtUrl updateDirectoryUrl = QtHelper.GetUpdateDirectoryUrl(host, target, Version, arch, customMirror: Options.Mirror);
 			QtUpdate update = qtUpdateByDirectoryUrl.GetValueOrDefault(updateDirectoryUrl) ??
 				await QtHelper.FetchUpdate(updateDirectoryUrl, Options.NoHash, cancellationToken);
 			qtUpdateByDirectoryUrl[updateDirectoryUrl] = update;
@@ -129,7 +133,7 @@ public class InstallQtCommand : ICommand {
 		List<Download> downloads = [];
 		HashSet<string> locatedModules = new();
 		HashSet<string> locatedExtensions = new();
-		void AddDownload(QtUpdate.Package package, string updateDirectoryUrl) {
+		void AddDownload(QtUpdate.Package package, QtUrl updateDirectoryUrl) {
 			downloads.AddRange(
 				from archive in package.Archives
 				let shouldSkip =
@@ -151,7 +155,7 @@ public class InstallQtCommand : ICommand {
 				locatedModules.Add(moduleName);
 			}
 			foreach (string extensionName in Options.Extensions) {
-				string extUpdateDirectoryUrl = QtHelper.GetExtensionUpdateDirectoryUrl(host, target, Version, arch, extensionName);
+				QtUrl extUpdateDirectoryUrl = QtHelper.GetExtensionUpdateDirectoryUrl(host, target, Version, arch, extensionName, customMirror: Options.Mirror);
 				QtUpdate extUpdate = await QtHelper.FetchUpdate(extUpdateDirectoryUrl, Options.NoHash, cancellationToken, allowNotFound: true);
 				if (ReferenceEquals(extUpdate, QtHelper.UpdateNotFound)) {
 					continue;
@@ -203,7 +207,7 @@ public class InstallQtCommand : ICommand {
 				CancellationToken = cancellationToken
 			},
 			async (download, ct) => {
-				string remoteUrl = download.GetUrl();
+				QtUrl remoteUrl = download.GetUrl();
 				string localPath = download.GetLocalPath(downloadDirectory);
 				byte[] hash = Options.NoHash ? Network.DummySha256Hash : await Network.GetPublishedSha256ForFileAsync(remoteUrl, ct);
 				lock (createDirectorySync) {
@@ -398,14 +402,14 @@ public class InstallQtCommand : ICommand {
 	}
 
 	private record Update(
-		string UpdateDirectoryUrl,
+		QtUrl UpdateDirectoryUrl,
 		QtUpdate.Package BasePackage,
 		Dictionary<string, QtModule> ModulesByName
 	);
 
-	private record Download(QtUpdate.Archive Archive, QtUpdate.Package Package, string UpdateDirectoryUrl) {
-		public string GetUrl() =>
-			$"{UpdateDirectoryUrl}{Package.Name}/{Archive.FileName}";
+	private record Download(QtUpdate.Archive Archive, QtUpdate.Package Package, QtUrl UpdateDirectoryUrl) {
+		public QtUrl GetUrl() =>
+			UpdateDirectoryUrl with { Path = UpdateDirectoryUrl.Path + $"{Package.Name}/{Archive.FileName}" };
 
 		public string GetLocalPath(string directory) =>
 			Path.Combine(directory, Package.GetNameWithoutVersion(), Archive.Identifier);

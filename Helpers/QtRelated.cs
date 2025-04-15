@@ -92,6 +92,11 @@ public record QtVersion(int Major, int Minor, int Revision) {
 			.With(n => new QtVersion(n[0], n[1], n[2]));
 }
 
+public record QtUrl(string Mirror, string Path) {
+	public override string ToString() =>
+		Mirror + Path;
+}
+
 public class QtUpdate {
 	public required Package[] Packages { get; set; }
 
@@ -112,7 +117,10 @@ public static class QtHelper {
 
 	public static readonly QtUpdate UpdateNotFound = new() { Packages = [] };
 
-	public static string GetUpdateDirectoryUrl(QtHost host, QtTarget target, QtVersion version, QtArch? arch = null) {
+	public static QtUrl GetUpdateDirectoryUrl(QtHost host, QtTarget target, QtVersion version, QtArch? arch = null,
+		string? customMirror = null)
+	{
+		string mirror = customMirror ?? Constants.TrustedMirror;
 		string hostComponent = host.ToUrlComponent();
 		string targetComponent = target.ToUrlComponent(version);
 		string versionVariant = GetUrlVersionVariant(target, version, arch ?? new QtArch("unspecified"));
@@ -120,20 +128,23 @@ public static class QtHelper {
 			throw new ArgumentException("Listing architectures for this target is not supported.");
 		}
 		string versionComponent = version.ToUrlComponent(versionVariant);
-		return $"{Constants.TrustedMirror}/online/qtsdkrepository/{hostComponent}/{targetComponent}/{versionComponent}/";
+		return new QtUrl(mirror, $"/online/qtsdkrepository/{hostComponent}/{targetComponent}/{versionComponent}/");
 	}
 
-	public static string GetExtensionUpdateDirectoryUrl(QtHost host, QtTarget target, QtVersion version, QtArch arch, string extensionName) {
+	public static QtUrl GetExtensionUpdateDirectoryUrl(QtHost host, QtTarget target, QtVersion version, QtArch arch,
+		string extensionName, string? customMirror = null)
+	{
+		string mirror = customMirror ?? Constants.TrustedMirror;
 		string hostComponent = host.ToUrlComponent();
 		string versionComponent = version.ToStringNoDots();
 		string archComponent = GetExtensionArch(host, target, version, arch);
-		return $"{Constants.TrustedMirror}/online/qtsdkrepository/{hostComponent}/extensions/{extensionName}/{versionComponent}/{archComponent}/";
+		return new QtUrl(mirror, $"/online/qtsdkrepository/{hostComponent}/extensions/{extensionName}/{versionComponent}/{archComponent}/");
 	}
 
 	public static async Task<QtUpdate> FetchUpdate(
-		string updateDirectoryUrl, bool noHash = false, CancellationToken cancellationToken = default, bool allowNotFound = false
+		QtUrl updateDirectoryUrl, bool noHash = false, CancellationToken cancellationToken = default, bool allowNotFound = false
 	) {
-		string url = $"{updateDirectoryUrl}Updates.xml";
+		QtUrl url = updateDirectoryUrl with { Path = updateDirectoryUrl.Path + "Updates.xml" };
 		try {
 			byte[] expectedHash = noHash ? Network.DummySha256Hash : await Network.GetPublishedSha256ForFileAsync(url, cancellationToken);
 			string updateXml = await Network.GetAsUtf8StringWithSha256ValidationAsync(url, expectedHash, cancellationToken);

@@ -13,7 +13,7 @@ namespace naqt;
 public static class Constants {
 	public const int FileBufferSize = 65536;
 
-	public static readonly string TrustedMirror = "https://download.qt.io";
+	public const string TrustedMirror = "https://download.qt.io";
 
 	public const int DownloadConcurrency = 4;
 
