@@ -398,6 +398,28 @@ public class InstallQtCommand : ICommand {
 					Logger.Write($"Patched {scriptPath}");
 				}
 			}
+
+			if (Target.Value == "wasm" && Arch.Value == "wasm_singlethread" && !OperatingSystem.IsWindows()) {
+				// Add execute permissions - special case for when the 7z archives are built on Windows and
+				// therefore lack Unix permission attributes but are intended for cross-platform use.
+				List<string[]> executableRelativePaths = [
+					["bin", "qmake"],
+					["bin", "qmake6"],
+					["bin", "qtpaths"],
+					["bin", "qtpaths6"],
+					["bin", "qt-cmake"],
+					["bin", "qt-configure-module"],
+					["libexec", "qt-cmake-private"],
+					["libexec", "qt-cmake-standalone-test"]
+				];
+				foreach (string executablePath in executableRelativePaths.Select(p => Path.Combine([installDirectory, ..p]))) {
+					new FileInfo(executablePath).UnixFileMode |=
+						UnixFileMode.UserExecute |
+						UnixFileMode.GroupExecute |
+						UnixFileMode.OtherExecute;
+					Logger.Write($"Permitted {executablePath}");
+				}
+			}
 		}
 	}
 
