@@ -10,7 +10,7 @@ dotnet naqt.dll install-qt windows desktop 6.8.3 win64_msvc2022_64
 ```
 Or if you have the full dotnet SDK and prefer to run from source:
 ```
-git clone --recurse-submodules https://github.com/jdpurcell/naqt
+git clone https://github.com/jdpurcell/naqt
 cd naqt
 dotnet run -- install-qt windows desktop 6.8.3 win64_msvc2022_64
 ```
