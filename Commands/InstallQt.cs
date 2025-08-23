@@ -374,8 +374,9 @@ public class InstallQtCommand : ICommand {
 			// Patch qmake/qtpaths scripts
 			IEnumerable<string> scriptPaths =
 				from name in new[] { "qmake", "qtpaths", $"qmake{Version.Major}", $"qtpaths{Version.Major}" }
+				from prefix in new[] { "", "host-" }
 				from extension in new[] { "", ".bat" }
-				select Path.Combine(installDirectory, "bin", name + extension);
+				select Path.Combine(installDirectory, "bin", prefix + name + extension);
 			string[] placeholders = [
 				"/Users/qt/work/install/",
 				"/home/qt/work/install/"
