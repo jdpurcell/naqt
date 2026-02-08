@@ -325,7 +325,7 @@ public class InstallQtCommand : ICommand {
 			Path.Combine(installDirectory, "mkspecs", "qconfig.pri"),
 			[
 				("QT_EDITION =", " OpenSource"),
-				("QT_LICHECK =", ""),
+				("QT_LICHECK =", "")
 			]
 		);
 

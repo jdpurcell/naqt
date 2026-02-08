@@ -5,7 +5,7 @@ using static System.Console;
 
 namespace naqt;
 
-internal static class Program {
+file static class Program {
 	public static async Task<int> Main(string[] args) {
 		using CancellationTokenSource cts = new();
 

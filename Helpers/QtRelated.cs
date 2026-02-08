@@ -123,7 +123,7 @@ public static class QtHelper {
 		string mirror = customMirror ?? Constants.TrustedMirror;
 		string hostComponent = host.ToUrlComponent();
 		string targetComponent = target.ToUrlComponent(version);
-		string versionVariant = GetUrlVersionVariant(target, version, arch ?? new QtArch("unspecified"));
+		string versionVariant = GetUrlVersionVariant(host, target, version, arch ?? new QtArch("unspecified"));
 		if (versionVariant == "unspecified") {
 			throw new ArgumentException("Listing architectures for this target is not supported.");
 		}
@@ -212,13 +212,17 @@ public static class QtHelper {
 			throw new ArgumentException("Unable to determine a default architecture for this host.");
 	}
 
-	public static string GetUrlVersionVariant(QtTarget target, QtVersion version, QtArch arch) {
-		if (target.Value == "wasm") {
-			return version.IsAtLeast(6, 5, 0) ? arch.Value : "wasm";
+	public static string GetUrlVersionVariant(QtHost host, QtTarget target, QtVersion version, QtArch arch) {
+		if (host.Value == "windows" && target.Value == "desktop" && version.IsAtLeast(6, 11, 0)) {
+			return arch.Value == "unspecified" ? arch.Value :
+				arch.Value.StripPrefix("win64_") ?? "";
 		}
 		if (target.Value == "android") {
 			return arch.Value == "unspecified" ? arch.Value :
 				arch.Value.StripPrefix("android_") ?? "";
+		}
+		if (target.Value == "wasm") {
+			return version.IsAtLeast(6, 5, 0) ? arch.Value : "wasm";
 		}
 		return "";
 	}
@@ -240,7 +244,7 @@ public static class QtHelper {
 			extensionArch = arch.Value;
 		}
 		else if (host.IsWindows && target.Value == "desktop") {
-			extensionArch = arch.Value.StripPrefix("win64_")?.Replace("_arm64_cross_compiled", "_arm64");
+			extensionArch = arch.Value.StripPrefix("win64_")?.Replace("_cross_compiled", "");
 		}
 		else if (target.Value == "desktop") {
 			extensionArch = (host.Value, arch.Value) switch {
