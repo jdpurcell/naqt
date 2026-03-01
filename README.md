@@ -27,6 +27,7 @@ Commands
       [--autodesktop]
       [--mirror <baseurl>]
       [--nohash]
+      [--dryrun]
 
    list-qt
       <host> <target> <version> [<arch>]

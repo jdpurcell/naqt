@@ -67,6 +67,7 @@ file static class Program {
 		WriteLine("      [--autodesktop]");
 		WriteLine("      [--mirror <baseurl>]");
 		WriteLine("      [--nohash]");
+		WriteLine("      [--dryrun]");
 		WriteLine();
 		WriteLine("   list-qt");
 		WriteLine("      <host> <target> <version> [<arch>]");

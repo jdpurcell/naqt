@@ -21,6 +21,7 @@ public class InstallQtOptions : ICommandOptions {
 	public bool AutoDesktop { get; set; }
 	public string? Mirror { get; set; }
 	public bool NoHash { get; set; }
+	public bool DryRun { get; set; }
 
 	public InstallQtOptions(CliParser cli) {
 		Host = new QtHost(cli.GetValueArg());
@@ -59,6 +60,9 @@ public class InstallQtOptions : ICommandOptions {
 					break;
 				case "--nohash":
 					NoHash = true;
+					break;
+				case "--dryrun":
+					DryRun = true;
 					break;
 				default:
 					throw new InvalidArgumentException();
@@ -184,6 +188,16 @@ public class InstallQtCommand : ICommand {
 			downloads.Single(d => d.Package == package && d.Archive.MatchesShortName("qtbase"));
 		Download baseDownload = FindQtbaseDownload(primaryUpdate.BasePackage);
 		Download? desktopBaseDownload = desktopUpdate?.BasePackage.With(FindQtbaseDownload);
+
+		if (Options.DryRun) {
+			foreach (IGrouping<QtUrl, Download> downloadsByUpdateDir in downloads.GroupBy(d => d.UpdateDirectoryUrl)) {
+				Logger.Write($"From: {downloadsByUpdateDir.Key.Path}");
+				foreach (Download download in downloadsByUpdateDir) {
+					Logger.Write($"  {download.RemoteRelativePath}");
+				}
+			}
+			return;
+		}
 
 		object createDirectorySync = new();
 		HashSet<string> directoriesPendingDeletion = [downloadDirectory];
@@ -431,8 +445,11 @@ public class InstallQtCommand : ICommand {
 	);
 
 	private record Download(QtUpdate.Archive Archive, QtUpdate.Package Package, QtUrl UpdateDirectoryUrl) {
+		public string RemoteRelativePath =>
+			$"{Package.Name}/{Archive.FileName}";
+
 		public QtUrl GetUrl() =>
-			UpdateDirectoryUrl with { Path = UpdateDirectoryUrl.Path + $"{Package.Name}/{Archive.FileName}" };
+			UpdateDirectoryUrl with { Path = UpdateDirectoryUrl.Path + RemoteRelativePath };
 
 		public string GetLocalPath(string directory) =>
 			Path.Combine(directory, Package.GetNameWithoutVersion(), Archive.Identifier);
