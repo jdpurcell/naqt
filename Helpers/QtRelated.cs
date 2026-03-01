@@ -209,7 +209,7 @@ public static class QtHelper {
 				_ => null
 			};
 		}
-		return archValue != null ? new QtArch(archValue) :
+		return archValue is not null ? new QtArch(archValue) :
 			throw new ArgumentException("Unable to determine a default architecture for this host.");
 	}
 
@@ -305,7 +305,7 @@ public static class QtHelper {
 			desktopArch = desktopHost.Value == "windows" ? new QtArch("win64_mingw") :
 				GetDefaultDesktopArch();
 		}
-		return desktopArch != null ? new AutoDesktopConfiguration(desktopHost, desktopArch) : null;
+		return desktopArch is not null ? new AutoDesktopConfiguration(desktopHost, desktopArch) : null;
 	}
 
 	public static string InferArchDirectoryName(QtHost host, QtTarget target, QtVersion version, QtArch arch) {
@@ -342,18 +342,19 @@ public static class QtHelper {
 public record AutoDesktopConfiguration(QtHost Host, QtArch Arch);
 
 public static class QtExtensionMethods {
-	public static QtUpdate.Package[] GetBasePackages(this QtUpdate update) {
+	public static QtUpdate.Package[] GetBasePackages(this QtUpdate update, string? extensionName = null) {
+		string baseArchivePrefix = extensionName is null ? "qtbase-" : $"{extensionName}-";
 		return [..
 			from package in update.Packages
-			where package.Archives.Any(a => a.Identifier.StartsWithOrdinal("qtbase-"))
+			where package.Archives.Any(a => a.Identifier.StartsWithOrdinal(baseArchivePrefix))
 			let nameSegments = package.Name.Split('.')
 			where nameSegments.Length == 4
 			select package
 		];
 	}
 
-	public static QtUpdate.Package GetBasePackage(this QtUpdate update, QtArch arch) {
-		List<QtUpdate.Package> packages = GetBasePackages(update)
+	public static QtUpdate.Package GetBasePackage(this QtUpdate update, QtArch arch, string? extensionName = null) {
+		List<QtUpdate.Package> packages = GetBasePackages(update, extensionName)
 			.Where(p => p.Name.EndsWithOrdinal($".{arch.Value}")).Take(2).ToList();
 		return packages.Count switch {
 			1 => packages[0],

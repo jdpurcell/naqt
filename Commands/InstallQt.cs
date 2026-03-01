@@ -164,9 +164,8 @@ public class InstallQtCommand : ICommand {
 				if (ReferenceEquals(extUpdate, QtHelper.UpdateNotFound)) {
 					continue;
 				}
-				foreach (QtUpdate.Package extensionPackage in extUpdate.Packages.Where(p => p.Name.EndsWithOrdinal($".{arch.Value}"))) {
-					AddDownload(extensionPackage, extUpdateDirectoryUrl);
-				}
+				QtUpdate.Package extBasePackage = extUpdate.GetBasePackage(arch, extensionName);
+				AddDownload(extBasePackage, extUpdateDirectoryUrl);
 				locatedExtensions.Add(extensionName);
 			}
 		}
