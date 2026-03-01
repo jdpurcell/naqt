@@ -213,18 +213,21 @@ public static class QtHelper {
 	}
 
 	public static string GetUrlVersionVariant(QtHost host, QtTarget target, QtVersion version, QtArch arch) {
+		string? variantValue;
 		if (host.Value == "windows" && target.Value == "desktop" && version.IsAtLeast(6, 11, 0)) {
-			return arch.Value == "unspecified" ? arch.Value :
-				arch.Value.StripPrefix("win64_") ?? "";
+			variantValue = arch.Value == "unspecified" ? arch.Value : arch.Value.StripPrefix("win64_");
 		}
-		if (target.Value == "android") {
-			return arch.Value == "unspecified" ? arch.Value :
-				arch.Value.StripPrefix("android_") ?? "";
+		else if (target.Value == "android" && version.IsAtLeast(6, 0, 0)) {
+			variantValue = arch.Value == "unspecified" ? arch.Value : arch.Value.StripPrefix("android_");
 		}
-		if (target.Value == "wasm") {
-			return version.IsAtLeast(6, 5, 0) ? arch.Value : "wasm";
+		else if (target.Value == "wasm") {
+			variantValue = version.IsAtLeast(6, 5, 0) ? arch.Value : "wasm";
 		}
-		return "";
+		else {
+			variantValue = "";
+		}
+		return variantValue ??
+			throw new ArgumentException("Unable to determine the URL version variant for this host.");
 	}
 
 	public static bool UsesAllOsHost(QtTarget target, QtVersion version) {
