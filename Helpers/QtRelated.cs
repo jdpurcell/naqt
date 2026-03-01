@@ -193,7 +193,8 @@ public static class QtHelper {
 			archValue = host.Value switch {
 				"windows" =>
 					version.IsAtLeast(6, 8, 0) ? "win64_msvc2022_64" :
-					"win64_msvc2019_64",
+					version.IsAtLeast(5, 15, 0) ? "win64_msvc2019_64" :
+					"win64_msvc2017_64",
 				"windows_arm64" =>
 					version.IsAtLeast(6, 8, 0) ? "win64_msvc2022_arm64" :
 					null,
