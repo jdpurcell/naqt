@@ -35,7 +35,7 @@ Commands
       [--nohash]
 ```
 
-The syntax is mostly compatible with `aqtinstall` so you can use [this site](https://ddalcino.github.io/aqt-list-server/) to help, although note that short argument names (e.g. `-m`) aren't supported.
+You can use [this site](https://jdpurcell.github.io/naqt-command-builder/) to help build the install command. It is inspired by [this site](https://ddalcino.github.io/aqt-list-server/) which is for `aqtinstall` &mdash; may be useful too considering the similar (but not identical) syntax.
 
 ## GitHub Actions
 Already using `jurplel/install-qt-action`? Just change it to use [my fork](https://github.com/jdpurcell/install-qt-action) on the `v5` branch and set the `use-naqt` option to `true`. You can also set `setup-python` to `false` since this tool doesn't need it. Example:
