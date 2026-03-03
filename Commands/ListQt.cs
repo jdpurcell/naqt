@@ -48,6 +48,10 @@ public class ListQtCommand : ICommand {
 	}
 
 	public async Task RunAsync(CancellationToken cancellationToken = default) {
+		if (QtHelper.UsesAllOsHost(Target, Version) && Host.Value != "all_os") {
+			Options.Host = new QtHost("all_os");
+		}
+
 		QtUrl updateDirectoryUrl = QtHelper.GetUpdateDirectoryUrl(Host, Target, Version, Arch, customMirror: Options.Mirror);
 		QtUpdate update = await QtHelper.FetchUpdate(updateDirectoryUrl, Options.NoHash, cancellationToken);
 		if (Arch is null) {
