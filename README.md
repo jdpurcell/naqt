@@ -35,10 +35,11 @@ Commands
       [--nohash]
 ```
 
-You can use [this site](https://jdpurcell.github.io/naqt-command-builder/) to help build the install command. It is inspired by [this site](https://ddalcino.github.io/aqt-list-server/) which is for `aqtinstall` &mdash; may be useful too considering the similar (but not identical) syntax.
+You can use [this site](https://jdpurcell.github.io/naqt-command-builder/) to help build the install command.
 
 ## GitHub Actions
 Already using `jurplel/install-qt-action`? Just change it to use [my fork](https://github.com/jdpurcell/install-qt-action) on the `v5` branch and set the `use-naqt` option to `true`. You can also set `setup-python` to `false` since this tool doesn't need it. Example:
+
 ```yaml
 - name: Install Qt
   uses: jdpurcell/install-qt-action@v5
@@ -48,9 +49,18 @@ Already using `jurplel/install-qt-action`? Just change it to use [my fork](https
     # .. other options ..
 ```
 
+You can use [this site](https://jdpurcell.github.io/naqt-command-builder/) to help build the install script.
+
 ## Limitations
 * The full version number (major.minor.patch, no wildcards) must be specified.
 * Cannot install Qt tools, source code, documentation, or examples.
 * When cross-compiling (e.g. WASM, Android, iOS), it's recommended to perform installation in a single step with `--autodesktop`. `install-qt-action` enables this option by default. It is possible, however, to perform the host and target installations in separate steps, but do not pass `--autodesktop` in this case.
 
 If you need any of these features, use the excellent [aqtinstall](https://github.com/miurahr/aqtinstall) instead.
+
+## Syntax vs aqtinstall
+* For WASM, `naqt` uses target `wasm` for all versions, whereas `aqt` uses target `desktop` for versions < 6.7.
+* `naqt` has an `--extensions` switch although its use is optional; it detects known extensions (`qtpdf`, `qtwebengine`) requested via `--modules`, similar to `aqt`.
+* `naqt` switch `--mirror` is `aqt` switch `--base`.
+* `naqt` switch `--nohash` is `aqt` switch `--UNSAFE-ignore-hash`.
+* `naqt` switch `--dryrun` is `aqt` switch `--dry-run`.
