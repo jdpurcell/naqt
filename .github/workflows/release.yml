@@ -6,7 +6,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         submodules: recursive
     - name: Build
@@ -26,7 +26,7 @@ jobs:
         filename: naqt.zip
     - name: Upload Release
       if: github.ref == 'refs/heads/main'
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         tag_name: latest
         files: Publish/naqt.zip
