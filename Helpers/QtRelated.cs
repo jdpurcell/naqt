@@ -43,6 +43,7 @@ public record QtTarget(string Value) {
 			"desktop" => "desktop",
 			"wasm" => version.IsAtLeast(6, 7, 0) ? "wasm" : "desktop",
 			"android" => "android",
+			"harmonyos" => "harmonyos",
 			"ios" => "ios",
 			_ => throw new ArgumentException("Target value is not recognized.")
 		};
@@ -218,11 +219,14 @@ public static class QtHelper {
 		if (host.Value == "windows" && target.Value == "desktop" && version.IsAtLeast(6, 11, 0)) {
 			variantValue = arch.Value == "unspecified" ? arch.Value : arch.Value.StripPrefix("win64_");
 		}
+		else if (target.Value == "wasm") {
+			variantValue = version.IsAtLeast(6, 5, 0) ? arch.Value : "wasm";
+		}
 		else if (target.Value == "android" && version.IsAtLeast(6, 0, 0)) {
 			variantValue = arch.Value == "unspecified" ? arch.Value : arch.Value.StripPrefix("android_");
 		}
-		else if (target.Value == "wasm") {
-			variantValue = version.IsAtLeast(6, 5, 0) ? arch.Value : "wasm";
+		else if (target.Value == "harmonyos") {
+			variantValue = arch.Value == "unspecified" ? arch.Value : arch.Value.StripPrefix("harmonyos_");
 		}
 		else {
 			variantValue = "";
@@ -235,6 +239,7 @@ public static class QtHelper {
 		return target.Value switch {
 			"wasm" when version.IsAtLeast(6, 7, 0) => true,
 			"android" when version.IsAtLeast(6, 7, 0) => true,
+			"harmonyos" => true,
 			_ => false
 		};
 	}
@@ -301,7 +306,7 @@ public static class QtHelper {
 		else if (target.Value == "ios" && desktopHost.Value == "mac") {
 			desktopArch = GetDefaultDesktopArch();
 		}
-		else if (target.Value is "wasm" or "android") {
+		else if (target.Value is "wasm" or "android" or "harmonyos") {
 			desktopArch = desktopHost.Value == "windows" ? new QtArch("win64_mingw") :
 				GetDefaultDesktopArch();
 		}
