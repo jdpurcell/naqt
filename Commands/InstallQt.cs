@@ -198,7 +198,7 @@ public class InstallQtCommand : ICommand {
 			return;
 		}
 
-		object createDirectorySync = new();
+		Lock createDirectorySync = new();
 		HashSet<string> directoriesPendingDeletion = [downloadDirectory];
 		void CleanupDirectories() {
 			foreach (string directory in directoriesPendingDeletion) {

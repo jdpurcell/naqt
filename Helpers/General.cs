@@ -24,7 +24,7 @@ public static class Helper {
 	public static void ExtractSevenZip(
 		string archivePath,
 		string destDirectory,
-		object? createDirectorySync = null,
+		Lock? createDirectorySync = null,
 		CancellationToken cancellationToken = default)
 	{
 		using SevenZipArchive archive = SevenZipArchive.Open(archivePath);
