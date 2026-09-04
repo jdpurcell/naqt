@@ -22,7 +22,7 @@ Commands
       <host> <target> <version> [<arch>]
       [--outputdir <directory>]
       [--modules <module> [<module>...]]
-      [--extensions <extension> [<extension>...]]
+      [--extensions <extension[@version]> [<extension[@version]>...]]
       [--archives <archive> [<archive>...]]
       [--autodesktop]
       [--mirror <baseurl>]

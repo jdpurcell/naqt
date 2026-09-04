@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
@@ -104,6 +105,17 @@ public class QtUpdate {
 	public class Package {
 		public required string Name { get; set; }
 		public required Archive[] Archives { get; set; }
+
+		// Fixes Qt's inconsistent naming, e.g.:
+		// qt.qt6.6120.qtforios.device -> qt.qt6.6120.ios_device
+		// extensions.qtpdf.6120.61400.ios.device -> extensions.qtpdf.6120.61400.ios_device
+		public string EffectiveName {
+			get {
+				string value = Name;
+				value = Regex.Replace(value, @"(^|\.)(?:qtfor)?ios\.(device|simulator_arm64|simulator_x86_64)(?=$|\.)", "$1ios_$2", RegexOptions.CultureInvariant);
+				return value;
+			}
+		}
 	}
 
 	public class Archive {
@@ -114,7 +126,7 @@ public class QtUpdate {
 }
 
 public static class QtHelper {
-	public static readonly string[] KnownExtensions = ["qtwebengine", "qtpdf"];
+	public static readonly string[] KnownExtensionNames = ["qtwebengine", "qtpdf"];
 
 	public static readonly QtUpdate UpdateNotFound = new() { Packages = [] };
 
@@ -133,11 +145,13 @@ public static class QtHelper {
 	}
 
 	public static QtUrl GetExtensionUpdateDirectoryUrl(QtHost host, QtTarget target, QtVersion version, QtArch arch,
-		string extensionName, string? customMirror = null)
+		string extensionName, QtVersion? extensionVersion, string? customMirror = null)
 	{
 		string mirror = customMirror ?? Constants.TrustedMirror;
 		string hostComponent = host.ToUrlComponent();
-		string versionComponent = version.ToStringNoDots();
+		string versionComponent = extensionVersion is not null ?
+			$"{version.ToStringNoDots()}/{extensionVersion.ToStringNoDots()}" :
+			version.ToStringNoDots();
 		string archComponent = GetExtensionArch(host, target, version, arch);
 		return new QtUrl(mirror, $"/online/qtsdkrepository/{hostComponent}/extensions/{extensionName}/{versionComponent}/{archComponent}/");
 	}
@@ -187,10 +201,7 @@ public static class QtHelper {
 
 	public static QtArch GetDefaultArch(QtHost host, QtTarget target, QtVersion version) {
 		string? archValue = null;
-		if (host.Value == "mac" && target.Value == "ios") {
-			archValue = "ios";
-		}
-		else if (target.Value == "desktop") {
+		if (target.Value == "desktop") {
 			archValue = host.Value switch {
 				"windows" =>
 					version.IsAtLeast(6, 8, 0) ? "win64_msvc2022_64" :
@@ -210,6 +221,12 @@ public static class QtHelper {
 				_ => null
 			};
 		}
+		else if (host.Value == "mac" && target.Value == "ios" && version.IsUnder(6, 12, 0)) {
+			archValue = "ios";
+		}
+		else if (host.Value == "all_os" && target.Value == "harmonyos") {
+			archValue = "harmonyos_arm64_v8a";
+		}
 		return archValue is not null ? new QtArch(archValue) :
 			throw new ArgumentException("Unable to determine a default architecture for this host.");
 	}
@@ -224,6 +241,9 @@ public static class QtHelper {
 		}
 		else if (target.Value == "android" && version.IsAtLeast(6, 0, 0)) {
 			variantValue = arch.Value == "unspecified" ? arch.Value : arch.Value.StripPrefix("android_");
+		}
+		else if (target.Value == "ios" && version.IsAtLeast(6, 12, 0)) {
+			variantValue = arch.Value == "unspecified" ? arch.Value : arch.Value.StripPrefix("ios_");
 		}
 		else if (target.Value == "harmonyos") {
 			variantValue = arch.Value == "unspecified" ? arch.Value : arch.Value.StripPrefix("harmonyos_");
@@ -347,20 +367,24 @@ public static class QtHelper {
 public record AutoDesktopConfiguration(QtHost Host, QtArch Arch);
 
 public static class QtExtensionMethods {
-	public static QtUpdate.Package[] GetBasePackages(this QtUpdate update, string? extensionName = null) {
+	public static QtUpdate.Package[] GetBasePackages(this QtUpdate update,
+		string? extensionName = null, QtVersion? extensionVersion = null)
+	{
 		string baseArchivePrefix = extensionName is null ? "qtbase-" : $"{extensionName}-";
 		return [..
 			from package in update.Packages
 			where package.Archives.Any(a => a.Identifier.StartsWithOrdinal(baseArchivePrefix))
-			let nameSegments = package.Name.Split('.')
-			where nameSegments.Length == 4
+			let nameSegments = package.EffectiveName.Split('.')
+			where nameSegments.Length == (extensionVersion is not null ? 5 : 4)
 			select package
 		];
 	}
 
-	public static QtUpdate.Package GetBasePackage(this QtUpdate update, QtArch arch, string? extensionName = null) {
-		List<QtUpdate.Package> packages = GetBasePackages(update, extensionName)
-			.Where(p => p.Name.EndsWithOrdinal($".{arch.Value}")).Take(2).ToList();
+	public static QtUpdate.Package GetBasePackage(this QtUpdate update, QtArch arch,
+		string? extensionName = null, QtVersion? extensionVersion = null)
+	{
+		List<QtUpdate.Package> packages = GetBasePackages(update, extensionName, extensionVersion)
+			.Where(p => p.EffectiveName.EndsWithOrdinal($".{arch.Value}")).Take(2).ToList();
 		return packages.Count switch {
 			1 => packages[0],
 			0 => throw new Exception($"No base package found for \"{arch.Value}\"."),
@@ -371,8 +395,9 @@ public static class QtExtensionMethods {
 	public static QtArch[] GetArchitectures(this QtUpdate update) {
 		return [..
 			from package in GetBasePackages(update)
-			let lastDelimiter = package.Name.LastIndexOf('.')
-			select new QtArch(package.Name.Substring(lastDelimiter + 1))
+			let name = package.EffectiveName
+			let lastDelimiter = name.LastIndexOf('.')
+			select new QtArch(name.Substring(lastDelimiter + 1))
 		];
 	}
 
@@ -380,7 +405,7 @@ public static class QtExtensionMethods {
 		string[] groupNames = ["addons"];
 		return [..
 			from package in update.Packages
-			let nameSegments = package.Name.Split('.')
+			let nameSegments = package.EffectiveName.Split('.')
 			where nameSegments.Length >= 5 &&
 				  nameSegments[^1] == arch.Value
 			let hasGroupName = nameSegments.Length >= 6 &&

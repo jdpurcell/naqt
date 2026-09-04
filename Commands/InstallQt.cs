@@ -98,11 +98,13 @@ public class InstallQtCommand : ICommand {
 			Options.Host = new QtHost("all_os");
 		}
 
-		if (Version.IsAtLeast(6, 8, 0) && Options.Modules.Intersect(QtHelper.KnownExtensions).Any()) {
-			Options.Extensions.AddRange(Options.Modules.Intersect(QtHelper.KnownExtensions));
-			Options.Modules = Options.Modules.Except(QtHelper.KnownExtensions).ToList();
+		if (Version.IsAtLeast(6, 8, 0)) {
+			static bool IsKnownExtension(string value) =>
+				QtHelper.KnownExtensionNames.Any(n => value.StartsWithOrdinal(n) && (value.Length == n.Length || value[n.Length] == '@'));
+			Options.Extensions.AddRange(Options.Modules.Where(IsKnownExtension));
+			Options.Modules.RemoveAll(IsKnownExtension);
 		}
-		else if (Version.IsUnder(6, 8, 0) && Options.Extensions.Any()) {
+		else if (Options.Extensions.Any()) {
 			throw new Exception("Extensions don't exist in this Qt version.");
 		}
 
@@ -158,15 +160,19 @@ public class InstallQtCommand : ICommand {
 				AddDownload(module.Package, update.UpdateDirectoryUrl);
 				locatedModules.Add(moduleName);
 			}
-			foreach (string extensionName in Options.Extensions) {
-				QtUrl extUpdateDirectoryUrl = QtHelper.GetExtensionUpdateDirectoryUrl(host, target, Version, arch, extensionName, customMirror: Options.Mirror);
+			foreach (string extension in Options.Extensions) {
+				int versionDelimiter = extension.IndexOf('@');
+				string extensionName = versionDelimiter == -1 ? extension : extension[..versionDelimiter];
+				QtVersion? extensionVersion = versionDelimiter == -1 ? null : new QtVersion(extension[(versionDelimiter + 1)..]);
+				QtUrl extUpdateDirectoryUrl = QtHelper.GetExtensionUpdateDirectoryUrl(host, target, Version, arch,
+					extensionName, extensionVersion, customMirror: Options.Mirror);
 				QtUpdate extUpdate = await QtHelper.FetchUpdate(extUpdateDirectoryUrl, Options.NoHash, cancellationToken, allowNotFound: true);
 				if (ReferenceEquals(extUpdate, QtHelper.UpdateNotFound)) {
 					continue;
 				}
-				QtUpdate.Package extBasePackage = extUpdate.GetBasePackage(arch, extensionName);
+				QtUpdate.Package extBasePackage = extUpdate.GetBasePackage(arch, extensionName, extensionVersion);
 				AddDownload(extBasePackage, extUpdateDirectoryUrl);
-				locatedExtensions.Add(extensionName);
+				locatedExtensions.Add(extension);
 			}
 		}
 		await BuildDownloadStrategy(primaryUpdate, Host, Target, Arch);

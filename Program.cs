@@ -63,7 +63,7 @@ file static class Program {
 		WriteLine("      [--outputdir <directory>]");
 		WriteLine("      [--modules <module> [<module>...]]");
 		WriteLine("      [--archives <archive> [<archive>...]]");
-		WriteLine("      [--extensions <extension> [<extension>...]]");
+		WriteLine("      [--extensions <extension[@version]> [<extension[@version]>...]]");
 		WriteLine("      [--autodesktop]");
 		WriteLine("      [--mirror <baseurl>]");
 		WriteLine("      [--nohash]");
