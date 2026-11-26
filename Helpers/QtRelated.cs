@@ -128,6 +128,8 @@ public class QtUpdate {
 public static class QtHelper {
 	public static readonly string[] KnownExtensionNames = ["qtwebengine", "qtpdf"];
 
+	public static readonly string[] KnownSplitModuleNames = ["qt3d", "qtlocation"];
+
 	public static readonly QtUpdate UpdateNotFound = new() { Packages = [] };
 
 	public static QtUrl GetUpdateDirectoryUrl(QtHost host, QtTarget target, QtVersion version, QtArch? arch = null,
@@ -154,6 +156,17 @@ public static class QtHelper {
 			version.ToStringNoDots();
 		string archComponent = GetExtensionArch(host, target, version, arch);
 		return new QtUrl(mirror, $"/online/qtsdkrepository/{hostComponent}/extensions/{extensionName}/{versionComponent}/{archComponent}/");
+	}
+
+	public static QtUrl GetSplitModuleUpdateDirectoryUrl(QtHost host, QtTarget target, QtVersion version, QtArch arch,
+		string moduleName, string? customMirror = null)
+	{
+		string mirror = customMirror ?? Constants.TrustedMirror;
+		string hostComponent = host.ToUrlComponent();
+		string targetComponent = target.ToUrlComponent(version);
+		string versionVariant = GetUrlVersionVariant(host, target, version, arch);
+		string versionComponent = version.ToUrlComponent(versionVariant);
+		return new QtUrl(mirror, $"/online/qtsdkrepository/{hostComponent}/{targetComponent}/{versionComponent}_{moduleName}/");
 	}
 
 	public static async Task<QtUpdate> FetchUpdate(

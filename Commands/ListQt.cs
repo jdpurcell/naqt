@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -60,7 +63,24 @@ public class ListQtCommand : ICommand {
 			}
 		}
 		else {
-			foreach (QtModule module in update.GetModules(Arch)) {
+			List<QtModule> modules = [.. update.GetModules(Arch)];
+
+			if (Version.IsAtLeast(6, 12, 1)) {
+				foreach (string splitModuleName in QtHelper.KnownSplitModuleNames) {
+					if (modules.Any(m => m.Name == splitModuleName)) {
+						continue;
+					}
+					QtUrl modUpdateDirectoryUrl = QtHelper.GetSplitModuleUpdateDirectoryUrl(Host, Target, Version, Arch,
+						splitModuleName, customMirror: Options.Mirror);
+					QtUpdate modUpdate = await QtHelper.FetchUpdate(modUpdateDirectoryUrl, Options.NoHash, cancellationToken, allowNotFound: true);
+					if (ReferenceEquals(modUpdate, QtHelper.UpdateNotFound)) {
+						continue;
+					}
+					modules.AddRange(modUpdate.GetModules(Arch));
+				}
+			}
+
+			foreach (QtModule module in modules.OrderBy(m =>  m.Name, StringComparer.Ordinal)) {
 				Logger.Write(module.Name);
 			}
 		}

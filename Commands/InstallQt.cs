@@ -109,11 +109,15 @@ public class InstallQtCommand : ICommand {
 		}
 
 		Dictionary<QtUrl, QtUpdate> qtUpdateByDirectoryUrl = new();
+		async Task<QtUpdate> FetchRawUpdate(QtUrl updateDirectoryUrl, bool allowNotFound = false) {
+			QtUpdate update = qtUpdateByDirectoryUrl.GetValueOrDefault(updateDirectoryUrl) ??
+				await QtHelper.FetchUpdate(updateDirectoryUrl, Options.NoHash, cancellationToken, allowNotFound);
+			qtUpdateByDirectoryUrl[updateDirectoryUrl] = update;
+			return update;
+		}
 		async Task<Update> FetchUpdate(QtHost host, QtTarget target, QtArch arch) {
 			QtUrl updateDirectoryUrl = QtHelper.GetUpdateDirectoryUrl(host, target, Version, arch, customMirror: Options.Mirror);
-			QtUpdate update = qtUpdateByDirectoryUrl.GetValueOrDefault(updateDirectoryUrl) ??
-				await QtHelper.FetchUpdate(updateDirectoryUrl, Options.NoHash, cancellationToken);
-			qtUpdateByDirectoryUrl[updateDirectoryUrl] = update;
+			QtUpdate update = await FetchRawUpdate(updateDirectoryUrl);
 			return new Update(
 				updateDirectoryUrl,
 				update.GetBasePackage(arch),
@@ -154,10 +158,24 @@ public class InstallQtCommand : ICommand {
 			AddDownload(update.BasePackage, update.UpdateDirectoryUrl);
 			foreach (string moduleName in Options.Modules) {
 				QtModule? module = update.ModulesByName.GetValueOrDefault(moduleName);
+				QtUrl? overriddenUpdateDirectoryUrl = null;
+				static bool IsKnownSplitModule(string value) =>
+					QtHelper.KnownSplitModuleNames.Any(n => value.StartsWithOrdinal(n) && (value.Length == n.Length || value[n.Length] == '.'));
+				if (module is null && Version.IsAtLeast(6, 12, 1) && IsKnownSplitModule(moduleName)) {
+					int suffixDelimiter = moduleName.IndexOf('.');
+					string splitModuleName = suffixDelimiter == -1 ? moduleName : moduleName[..suffixDelimiter];
+					QtUrl modUpdateDirectoryUrl = QtHelper.GetSplitModuleUpdateDirectoryUrl(host, target, Version, arch,
+						splitModuleName, customMirror: Options.Mirror);
+					QtUpdate modUpdate = await FetchRawUpdate(modUpdateDirectoryUrl, allowNotFound: true);
+					if (!ReferenceEquals(modUpdate, QtHelper.UpdateNotFound)) {
+						module = modUpdate.GetModules(arch).SingleOrDefault(m => m.Name == moduleName);
+						overriddenUpdateDirectoryUrl = modUpdateDirectoryUrl;
+					}
+				}
 				if (module is null) {
 					continue;
 				}
-				AddDownload(module.Package, update.UpdateDirectoryUrl);
+				AddDownload(module.Package, overriddenUpdateDirectoryUrl ?? update.UpdateDirectoryUrl);
 				locatedModules.Add(moduleName);
 			}
 			foreach (string extension in Options.Extensions) {
@@ -166,7 +184,7 @@ public class InstallQtCommand : ICommand {
 				QtVersion? extensionVersion = versionDelimiter == -1 ? null : new QtVersion(extension[(versionDelimiter + 1)..]);
 				QtUrl extUpdateDirectoryUrl = QtHelper.GetExtensionUpdateDirectoryUrl(host, target, Version, arch,
 					extensionName, extensionVersion, customMirror: Options.Mirror);
-				QtUpdate extUpdate = await QtHelper.FetchUpdate(extUpdateDirectoryUrl, Options.NoHash, cancellationToken, allowNotFound: true);
+				QtUpdate extUpdate = await FetchRawUpdate(extUpdateDirectoryUrl, allowNotFound: true);
 				if (ReferenceEquals(extUpdate, QtHelper.UpdateNotFound)) {
 					continue;
 				}
