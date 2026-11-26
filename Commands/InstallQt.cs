@@ -408,15 +408,16 @@ public class InstallQtCommand : ICommand {
 				);
 			}
 
-			// Patch qmake/qtpaths scripts
+			// Patch qmake/qtpaths scripts and Qt6Dependencies.cmake
 			IEnumerable<string> scriptPaths =
 				from name in new[] { "qmake", "qtpaths", $"qmake{Version.Major}", $"qtpaths{Version.Major}" }
 				from prefix in new[] { "", "host-" }
 				from extension in new[] { "", ".bat" }
 				select Path.Combine(installDirectory, "bin", prefix + name + extension);
+			scriptPaths = [.. scriptPaths, Path.Combine(installDirectory, "lib", "cmake", "Qt6", "Qt6Dependencies.cmake")];
 			string[] placeholders = [
-				"/Users/qt/work/install/",
-				"/home/qt/work/install/"
+				"/Users/qt/work/install",
+				"/home/qt/work/install"
 			];
 			foreach (string scriptPath in scriptPaths) {
 				if (!File.Exists(scriptPath)) {
@@ -424,10 +425,14 @@ public class InstallQtCommand : ICommand {
 				}
 				string scriptContent = File.ReadAllText(scriptPath);
 				bool changedScript = false;
-				string correctValue = Path.Combine(desktopInstallDirectory, ".")[..^1]; // Add trailing slash
+				char dirSepChar = scriptPath.EndsWithOrdinal(".cmake") ? '/' : Path.DirectorySeparatorChar;
+				string correctValue = desktopInstallDirectory.Replace(Path.DirectorySeparatorChar, dirSepChar);
 				foreach (string placeholder in placeholders) {
 					string originalInstance = scriptContent;
-					scriptContent = scriptContent.Replace(placeholder, correctValue)
+					scriptContent = scriptContent
+						.Replace(placeholder + '/', correctValue + dirSepChar)
+						.Replace(placeholder.Replace('/', '\\') + '\\', correctValue + dirSepChar)
+						.Replace(placeholder, correctValue)
 						.Replace(placeholder.Replace('/', '\\'), correctValue);
 					changedScript |= !ReferenceEquals(scriptContent, originalInstance);
 				}
