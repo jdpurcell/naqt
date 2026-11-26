@@ -4,7 +4,7 @@ Command line tool for downloading and installing prebuilt Qt binaries.
 This tool is unofficial and not affiliated with, endorsed by, or supported by Qt Group nor the Qt Project.
 
 ## Example
-Assuming you have the dotnet runtime, download [prebuilt binaries](https://github.com/jdpurcell/naqt/releases/download/latest/naqt.zip) and run:
+Assuming you have the dotnet runtime, download [prebuilt binaries](https://github.com/jdpurcell/naqt/releases/latest/download/naqt.zip) and run:
 ```
 dotnet naqt.dll install-qt windows desktop 6.8.3 win64_msvc2022_64
 ```
