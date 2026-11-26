@@ -26,6 +26,7 @@ file static class Program {
 			commandOptions = cli.GetValueArg() switch {
 				"install-qt" => new InstallQtOptions(cli),
 				"list-qt" => new ListQtOptions(cli),
+				"info" => new InfoOptions(cli),
 				_ => throw new InvalidArgumentException()
 			};
 		}
@@ -40,6 +41,7 @@ file static class Program {
 		ICommand command = commandOptions switch {
 			InstallQtOptions options => new InstallQtCommand(options, context),
 			ListQtOptions options => new ListQtCommand(options, context),
+			InfoOptions options => new InfoCommand(options, context),
 			_ => throw new InvalidOperationException()
 		};
 
@@ -73,5 +75,7 @@ file static class Program {
 		WriteLine("      <host> <target> <version> [<arch>]");
 		WriteLine("      [--mirror <baseurl>]");
 		WriteLine("      [--nohash]");
+		WriteLine();
+		WriteLine("   info");
 	}
 }

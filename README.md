@@ -33,6 +33,8 @@ Commands
       <host> <target> <version> [<arch>]
       [--mirror <baseurl>]
       [--nohash]
+
+    info
 ```
 
 You can use [this site](https://jdpurcell.github.io/naqt-command-builder/) to help build the install command.

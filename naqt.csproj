@@ -4,6 +4,9 @@
         <TargetFramework>net10.0</TargetFramework>
         <RollForward>LatestMajor</RollForward>
         <Nullable>enable</Nullable>
+        <BuildNumber Condition="'$(BuildNumber)' == ''">dev</BuildNumber>
+        <InformationalVersion>$(BuildNumber)</InformationalVersion>
+        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     </PropertyGroup>
     <ItemGroup>
       <PackageReference Include="SharpCompress" Version="0.40.0" />

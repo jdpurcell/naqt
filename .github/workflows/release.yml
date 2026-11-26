@@ -17,7 +17,7 @@ jobs:
         DOTNET_GENERATE_ASPNET_CERTIFICATE: false
         DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE: true
       run: |
-        dotnet publish naqt.csproj -c Release -p:UseAppHost=false -o Publish
+        dotnet publish naqt.csproj -c Release -p:UseAppHost=false -p:BuildNumber="$(date '+%Y-%m-%d').${GITHUB_SHA::7}" -o Publish
     - name: Zip
       if: github.ref == 'refs/heads/main'
       uses: thedoctor0/zip-release@0.7.6
